@@ -29,3 +29,12 @@ def view_volume(volume):
 
     slider.on_changed(update)
     plt.show()
+
+
+def visualize_image(image):
+    # Visualize the image using imshow
+    plt.imshow(image, cmap='gray')  # 'gray' cmap is for grayscale images
+    plt.colorbar()  # Optional: to show a color scale bar
+    plt.title("2D Image Visualization")  # Optional: Title for the image
+    plt.axis('off')  # Optional: Turn off the axis labels
+    plt.show()  # Show the image

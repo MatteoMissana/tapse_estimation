@@ -1,7 +1,7 @@
 import h5py
-from utils.plot import view_volume
+from utils.plot import view_volume, visualize_image
 
-file = r"C:\Users\User\Desktop\uni_matteo\quinto_anno\tesi_magistrale\data\4DRVQ_Jinyang\voxels\100001.h5"
+file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\100001.h5"
 
 def print_structure(name, obj):
     print(name, obj)
@@ -15,7 +15,8 @@ with h5py.File(file, 'r') as h5_file:
     image_0 = h5_file['Input']['grid00'][:]
 
 print(image_0.shape)
-#image_0 = image_0.transpose(2, 1, 0)
+image_0 = image_0.transpose(2,1,0)
+image_1 =image_0[161,::-1,:]
 
 # Call the function with your volume
-view_volume(image_0)
+visualize_image(image_1)
