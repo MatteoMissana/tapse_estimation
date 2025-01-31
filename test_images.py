@@ -1,10 +1,35 @@
 import h5py
 from utils.plot import VolumeViewer, visualize_image
 import numpy as np
-from utils.extract_slices import extract_planes
+from utils.extract_slices import extract_planes, rotation_matrix_from_vectors, rotate_volume
 
 
 file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\100001.h5"
+
+import numpy as np
+
+def create_parallelepiped(shape, start, size):
+    """
+    Create a 3D NumPy array with a parallelepiped of 1s inside a volume of 0s.
+
+    :param shape: Tuple (H, W, D) -> Shape of the full volume
+    :param start: Tuple (x, y, z) -> Starting position of the parallelepiped
+    :param size: Tuple (dx, dy, dz) -> Size of the parallelepiped
+    :return: 3D NumPy array with the parallelepiped
+    """
+    volume = np.zeros(shape, dtype=np.uint8)  # Create a 3D volume filled with 0s
+
+    x_start, y_start, z_start = start
+    dx, dy, dz = size
+
+    # Set 1s in the parallelepiped region
+    volume[x_start:x_start + dx, y_start:y_start + dy, z_start:z_start + dz] = 255
+
+    return volume
+
+
+# Create a volume of shape (100, 100, 100) with a parallelepiped at (30,30,30) of size (20,40,10)
+volume = create_parallelepiped(shape=(100, 100, 100), start=(30, 30, 30), size=(20, 40, 10))
 
 def print_structure(name, obj):
     print(name, obj)
@@ -30,7 +55,26 @@ viewer = VolumeViewer(image_superimposed)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
+R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0], np.array([1, 0, 0]))
+volume = rotate_volume(image_superimposed, R1)
 
+viewer = VolumeViewer(volume)
+viewer.show()
+print(viewer.clicked_points)
+print(viewer.unit_vectors)
+R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0])
+volume = rotate_volume(volume, R1)
+
+viewer = VolumeViewer(volume)
+viewer.show()
+print(viewer.clicked_points)
+print(viewer.unit_vectors)
+R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0])
+volume = rotate_volume(volume, R1)
+
+
+viewer = VolumeViewer(volume)
+viewer.show()
 
 '''
 image_final = image_0+mask

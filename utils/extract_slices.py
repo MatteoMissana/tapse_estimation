@@ -144,3 +144,56 @@ def extract_slice(volume, plane_point, plane_normal, size=322):
     # Reshape the result into a 2D array
     return slice_values.reshape(size, size)
 
+
+def rotation_matrix_from_vectors(vec, target=np.array([0, 0, 1])):
+    """
+    Compute the rotation matrix that aligns `vec` with the `target` vector.
+    Uses Rodrigues' rotation formula.
+
+    :param vec: Source vector (must be a unit vector)
+    :param target: Target vector (default: [0, 0, 1])
+    :return: 3x3 rotation matrix
+    """
+    vec = vec / np.linalg.norm(vec)  # Ensure it's a unit vector
+    target = target / np.linalg.norm(target)
+
+    v = np.cross(vec, target)  # Rotation axis
+    print(v)
+    c = np.dot(vec, target)  # Cosine of the angle
+    s = np.linalg.norm(v)  # Sine of the angle
+
+    if s == 0:  # Already aligned
+        return np.eye(3)
+
+    # Skew-symmetric cross-product matrix of v
+    vx = np.array([[0, -v[2], v[1]],
+                   [v[2], 0, -v[0]],
+                   [-v[1], v[0], 0]])
+
+    R = np.eye(3) + vx + (vx @ vx) * ((1 - c) / (s ** 2))
+    return R
+
+
+def rotate_volume(volume, R):
+    """
+    Apply a 3D rotation matrix to a volume.
+
+    :param volume: 3D NumPy array (H, W, D)
+    :param R: 3x3 rotation matrix
+    :return: Rotated volume
+    """
+    coords = np.array(np.meshgrid(
+        np.arange(volume.shape[0]),
+        np.arange(volume.shape[1]),
+        np.arange(volume.shape[2]),
+        indexing='ij'
+    )).reshape(3, -1)  # (3, N) coordinate grid
+
+    # Rotate coordinates
+    new_coords = R @ (coords - np.array(volume.shape)[:, None] / 2) + np.array(volume.shape)[:, None] / 2
+
+    # Interpolate rotated volume
+    rotated_volume = map_coordinates(volume, new_coords, order=1, mode='nearest')
+
+    return rotated_volume.reshape(volume.shape)
+
