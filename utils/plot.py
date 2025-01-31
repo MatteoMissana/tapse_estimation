@@ -113,7 +113,7 @@ class VolumeViewer:
             self.clicked_points.append((x, y, z))
             print(f"Point added: (x={x}, y={y}, z={z})")
             self.redraw_points()
-            if len(self.clicked_points) == 4:
+            if len(self.clicked_points) == 2:
                 self.calculate_unit_vectors()
     def redraw_points(self):
         """Redraw the selected points on the current slice."""
