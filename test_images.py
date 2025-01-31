@@ -4,7 +4,7 @@ import numpy as np
 from utils.extract_slices import extract_planes
 
 
-file = r"C:\Users\User\Desktop\uni_matteo\quinto_anno\tesi_magistrale\data\4DRVQ_Jinyang\voxels\100001.h5"
+file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\100001.h5"
 
 def print_structure(name, obj):
     print(name, obj)
