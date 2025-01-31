@@ -1,5 +1,5 @@
 import h5py
-from utils.plot import view_volume, visualize_image
+from utils.plot import VolumeViewer, visualize_image
 import numpy as np
 from utils.extract_slices import extract_planes
 
@@ -24,9 +24,12 @@ print(image_1.max())
 print(np.where(image_1[:,:,200]==True))
 image_superimposed = image_0 + image_1*50
 print(image_superimposed.max())
-image_superimposed = image_superimposed.transpose(2,0,1)
 print(image_superimposed.max())
-view_volume(image_superimposed)
+
+viewer = VolumeViewer(image_superimposed)
+viewer.show()
+print(viewer.clicked_points)
+print(viewer.unit_vectors)
 
 
 '''
