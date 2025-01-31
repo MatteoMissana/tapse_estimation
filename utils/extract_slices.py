@@ -173,6 +173,32 @@ def rotation_matrix_from_vectors(vec, target=np.array([0, 0, 1])):
     R = np.eye(3) + vx + (vx @ vx) * ((1 - c) / (s ** 2))
     return R
 
+def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None):
+    """
+    Compute the signed angle (in degrees) between `vec` and `target`.
+
+    :param vec: Source vector (does not need to be normalized)
+    :param target: Target vector (default: [0, 0, 1]), does not need to be normalized
+    :param ref_axis: Optional reference axis to determine sign of rotation (default: cross product of vec and target)
+    :return: Signed angle in degrees
+    """
+    vec = vec / np.linalg.norm(vec)  # Normalize vector
+    target = target / np.linalg.norm(target)
+
+    v_cross = np.cross(vec, target)  # Axis of rotation
+    dot_product = np.dot(vec, target)  # Cosine of angle
+    angle_rad = np.arctan2(np.linalg.norm(v_cross), dot_product)  # Angle in radians
+
+    if ref_axis is None:
+        ref_axis = v_cross  # Use cross product to determine sign if no reference axis is provided
+
+    # Determine sign of the angle using dot product with reference axis
+    sign = np.sign(np.dot(ref_axis, v_cross))  # +1 or -1
+    angle_deg = np.degrees(angle_rad) * sign  # Convert to degrees with sign
+
+    return angle_deg
+
+
 
 def rotate_volume(volume, R):
     """

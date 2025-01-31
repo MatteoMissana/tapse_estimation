@@ -1,12 +1,11 @@
 import h5py
 from utils.plot import VolumeViewer, visualize_image
 import numpy as np
-from utils.extract_slices import extract_planes, rotation_matrix_from_vectors, rotate_volume
+from utils.extract_slices import extract_planes, rotation_matrix_from_vectors, rotate_volume, signed_angle_between_vectors
+import scipy
 
 
 file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\100001.h5"
-
-import numpy as np
 
 def create_parallelepiped(shape, start, size):
     """
@@ -50,27 +49,22 @@ print(np.where(image_1[:,:,200]==True))
 image_superimposed = image_0 + image_1*50
 print(image_superimposed.max())
 print(image_superimposed.max())
+volume = image_superimposed
 
 viewer = VolumeViewer(image_superimposed)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
-R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0], np.array([1, 0, 0]))
-volume = rotate_volume(image_superimposed, R1)
+alpha = signed_angle_between_vectors(viewer.unit_vectors[0])
+volume = scipy.ndimage.rotate(volume, alpha, axes=(1,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
+
 
 viewer = VolumeViewer(volume)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
-R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0])
-volume = rotate_volume(volume, R1)
-
-viewer = VolumeViewer(volume)
-viewer.show()
-print(viewer.clicked_points)
-print(viewer.unit_vectors)
-R1 = rotation_matrix_from_vectors(viewer.unit_vectors[0])
-volume = rotate_volume(volume, R1)
+alpha = signed_angle_between_vectors(viewer.unit_vectors[0])
+volume = scipy.ndimage.rotate(volume, alpha, axes=(0,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
 
 
 viewer = VolumeViewer(volume)
