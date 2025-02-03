@@ -5,7 +5,7 @@ from utils.extract_slices import extract_planes, rotation_matrix_from_vectors, r
 import scipy
 
 
-file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\100001.h5"
+file = r"C:\Users\User\Desktop\uni_matteo\quinto_anno\tesi_magistrale\data\4DRVQ_Jinyang\voxels\100001.h5"
 
 def create_parallelepiped(shape, start, size):
     """
@@ -51,11 +51,12 @@ print(image_superimposed.max())
 print(image_superimposed.max())
 volume = image_superimposed
 
-viewer = VolumeViewer(image_superimposed)
+viewer = VolumeViewer(volume)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
 alpha = signed_angle_between_vectors(viewer.unit_vectors[0])
+print(alpha)
 volume = scipy.ndimage.rotate(volume, alpha, axes=(1,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
 
 
@@ -69,6 +70,7 @@ volume = scipy.ndimage.rotate(volume, alpha, axes=(0,2), reshape=True, order=3, 
 
 viewer = VolumeViewer(volume)
 viewer.show()
+annulus_coords = viewer.clicked_points[0]
 
 '''
 image_final = image_0+mask

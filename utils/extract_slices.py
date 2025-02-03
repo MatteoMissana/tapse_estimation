@@ -223,3 +223,74 @@ def rotate_volume(volume, R):
 
     return rotated_volume.reshape(volume.shape)
 
+
+import cupy as cp
+import numpy as np
+
+
+def slice_volume_z(vol, theta, z_center=None):
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+
+    # If not specified, use the center of the volume as the Z reference
+    if z_center is None:
+        z_center = vol.shape[2] / 2
+
+    # Define unit vectors for the rotated plane around Z-axis
+    e_xy = [[1.0, 0.0, 0.0], [0.0, np.cos(theta), np.sin(theta)]]
+
+    # Define the center based on the provided z_center
+    center = cp.array([vol.shape[0] / 2, vol.shape[1] / 2, z_center], dtype=float)
+
+    # Convert to CuPy array and normalize the vectors
+    e_xy = cp.array(e_xy)
+    e_xy = e_xy / cp.linalg.norm(e_xy, axis=1)[:, cp.newaxis]
+
+    # Compute the third vector using the cross product
+    ez = cp.cross(e_xy[0], e_xy[1])
+    r = cp.array([e_xy[0], e_xy[1], ez], dtype=cp.float32).T
+
+    # Free unnecessary GPU memory
+    del e_xy, ez
+
+    # Define the slice grid coordinates
+    mx, my = int(vol.shape[0]), int(vol.shape[1])
+    xs = cp.arange(0.5 - mx / 2, 0.5 + mx / 2)
+    ys = cp.arange(0.5 - my / 2, 0.5 + my / 2)
+
+    # Create an empty 3D coordinate array for the slice
+    pp = cp.zeros((3, mx, my), dtype=cp.float32)
+    pp[0, :, :] = xs.reshape(mx, 1)  # X-coordinates
+    pp[1, :, :] = ys.reshape(1, my)  # Y-coordinates
+
+    # Transform the slice coordinates to the original volume coordinate system
+    idx = cp.einsum('il,ljk->ijk', r, pp) + (0.5 + center.reshape(3, 1, 1))
+
+    # Free unused GPU memory
+    del r, xs, ys, pp, center
+
+    # Convert coordinates to integer indices
+    idx = idx.astype(cp.int16)
+
+    # Identify out-of-bounds coordinates
+    offpoints = cp.any(cp.array([
+        idx[0, :, :] < 0,
+        idx[0, :, :] >= vol.shape[0],
+        idx[1, :, :] < 0,
+        idx[1, :, :] >= vol.shape[1],
+        idx[2, :, :] < 0,
+        idx[2, :, :] >= vol.shape[2]
+    ]), axis=0)
+
+    # Set out-of-bounds indices to zero to prevent errors
+    idx[:, offpoints] = 0
+    img = vol[idx[0], idx[1], idx[2]]
+
+    # Free GPU memory
+    del offpoints, idx, vol
+
+    mempool.free_all_blocks()
+    pinned_mempool.free_all_blocks()
+
+    return img
+
