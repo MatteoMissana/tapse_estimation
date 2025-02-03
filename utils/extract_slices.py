@@ -203,6 +203,32 @@ def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None)
 
     return angle_deg
 
+import cupy as cp
+
+def signed_angle_between_vectors_gpu(vec, target=cp.array([0, 0, 1]), ref_axis=None):
+    """
+    Compute the signed angle (in degrees) between `vec` and `target`.
+
+    :param vec: Source vector (does not need to be normalized)
+    :param target: Target vector (default: [0, 0, 1]), does not need to be normalized
+    :param ref_axis: Optional reference axis to determine sign of rotation (default: cross product of vec and target)
+    :return: Signed angle in degrees
+    """
+    vec = vec / cp.linalg.norm(vec)  # Normalize vector
+    target = target / cp.linalg.norm(target)
+
+    v_cross = cp.cross(vec, target)  # Axis of rotation
+    dot_product = cp.dot(vec, target)  # Cosine of angle
+    angle_rad = cp.arctan2(cp.linalg.norm(v_cross), dot_product)  # Angle in radians
+
+    if ref_axis is None:
+        ref_axis = v_cross  # Use cross product to determine sign if no reference axis is provided
+
+    # Determine sign of the angle using dot product with reference axis
+    sign = cp.sign(cp.dot(ref_axis, v_cross))  # +1 or -1
+    angle_deg = cp.degrees(angle_rad) * sign  # Convert to degrees with sign
+
+    return angle_deg
 
 
 def rotate_volume(volume, R):

@@ -2,7 +2,7 @@ import h5py
 from utils.plot import VolumeViewer, visualize_image
 import numpy as np
 import cupy as cp
-from utils.extract_slices import signed_angle_between_vectors, slice_volume_z
+from utils.extract_slices import signed_angle_between_vectors_gpu, slice_volume_z
 from cupyx.scipy.ndimage import rotate
 
 
@@ -57,7 +57,7 @@ viewer = VolumeViewer(volume)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
-alpha = signed_angle_between_vectors(viewer.unit_vectors[0])
+alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
 print(alpha)
 volume = rotate(volume, alpha, axes=(1,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
 
@@ -66,8 +66,9 @@ viewer = VolumeViewer(volume)
 viewer.show()
 print(viewer.clicked_points)
 print(viewer.unit_vectors)
-alpha = signed_angle_between_vectors(viewer.unit_vectors[0])
-volume = rotate(volume, alpha, axes=(0,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
+alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
+print(alpha)
+volume = rotate(volume, -alpha, axes=(0,2), reshape=True, order=3, mode='constant', cval=0.0, prefilter=True)
 
 
 viewer = VolumeViewer(volume)
@@ -75,8 +76,10 @@ viewer.show()
 annulus_coords = viewer.clicked_points[0]
 
 vol = cp.asarray(volume)
-img = slice_volume_z(vol, 15, center=annulus_coords)
-visualize_image(img)
+degrees = np.linspace(0, 2*np.pi, 10)
+for angle in degrees:
+    img = slice_volume_z(vol, angle, center=annulus_coords)
+    visualize_image(img)
 '''
 image_final = image_0+mask
 image_final = image_final.transpose(0,2,1)
