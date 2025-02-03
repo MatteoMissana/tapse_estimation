@@ -1,5 +1,10 @@
 import numpy as np
 from scipy.ndimage import map_coordinates
+import cupy as cp
+
+print(cp.cuda.Device(0).compute_capability)  # Mostra la Compute Capability
+print(cp.cuda.Device(0).attributes)  # Mostra varie info sulla GPU
+
 
 def extract_planes(volume, line_point, line_direction, angles):
     """
@@ -224,73 +229,65 @@ def rotate_volume(volume, R):
     return rotated_volume.reshape(volume.shape)
 
 
-import cupy as cp
-import numpy as np
 
-
-def slice_volume_z(vol, theta, z_center=None):
+def slice_volume_z(vol, theta, center=None):
     mempool = cp.get_default_memory_pool()
     pinned_mempool = cp.get_default_pinned_memory_pool()
-
-    # If not specified, use the center of the volume as the Z reference
-    if z_center is None:
-        z_center = vol.shape[2] / 2
-
-    # Define unit vectors for the rotated plane around Z-axis
+    # unit vector
     e_xy = [[1.0, 0.0, 0.0], [0.0, np.cos(theta), np.sin(theta)]]
 
-    # Define the center based on the provided z_center
-    center = cp.array([vol.shape[0] / 2, vol.shape[1] / 2, z_center], dtype=float)
+    if center is None:
+        center = cp.array([vol.shape[0] / 2, vol.shape[1] / 2, vol.shape[2] / 2], dtype=float)
+    else:
+        center = cp.array([center[0], center[1], vol.shape[2] / 2], dtype=float)
 
-    # Convert to CuPy array and normalize the vectors
     e_xy = cp.array(e_xy)
     e_xy = e_xy / cp.linalg.norm(e_xy, axis=1)[:, cp.newaxis]
 
-    # Compute the third vector using the cross product
+    # free gpu mem
+    # R: rotation matrix: data_coords = center + r @ slice_coords
     ez = cp.cross(e_xy[0], e_xy[1])
     r = cp.array([e_xy[0], e_xy[1], ez], dtype=cp.float32).T
 
-    # Free unnecessary GPU memory
+    # free gpu mem
     del e_xy, ez
 
-    # Define the slice grid coordinates
+    # setup slice points P with coordinates (X, Y, 0)
     mx, my = int(vol.shape[0]), int(vol.shape[1])
     xs = cp.arange(0.5 - mx / 2, 0.5 + mx / 2)
     ys = cp.arange(0.5 - my / 2, 0.5 + my / 2)
 
-    # Create an empty 3D coordinate array for the slice
     pp = cp.zeros((3, mx, my), dtype=cp.float32)
-    pp[0, :, :] = xs.reshape(mx, 1)  # X-coordinates
-    pp[1, :, :] = ys.reshape(1, my)  # Y-coordinates
+    pp[0, :, :] = xs.reshape(mx, 1)
+    pp[1, :, :] = ys.reshape(1, my)
 
-    # Transform the slice coordinates to the original volume coordinate system
+    # Transform to data coordinates (x, y, z) - idx.shape == (3, mx, mx)
+    # pure numpy solution with nearest-neighbor interpolation
     idx = cp.einsum('il,ljk->ijk', r, pp) + (0.5 + center.reshape(3, 1, 1))
 
-    # Free unused GPU memory
+    # free gpu mem
     del r, xs, ys, pp, center
 
-    # Convert coordinates to integer indices
     idx = idx.astype(cp.int16)
+    # Find out which coordinates are out of range - shape (mx, mx)
+    offpoints = cp.any(cp.array([idx[0, :, :] < 0,
+                                 idx[0, :, :] >= vol.shape[0],
+                                 idx[1, :, :] < 0,
+                                 idx[1, :, :] >= vol.shape[1],
+                                 idx[2, :, :] < 0,
+                                 idx[2, :, :] >= vol.shape[2]
+                                 ]), axis=0)
 
-    # Identify out-of-bounds coordinates
-    offpoints = cp.any(cp.array([
-        idx[0, :, :] < 0,
-        idx[0, :, :] >= vol.shape[0],
-        idx[1, :, :] < 0,
-        idx[1, :, :] >= vol.shape[1],
-        idx[2, :, :] < 0,
-        idx[2, :, :] >= vol.shape[2]
-    ]), axis=0)
-
-    # Set out-of-bounds indices to zero to prevent errors
     idx[:, offpoints] = 0
-    img = vol[idx[0], idx[1], idx[2]]
+    img = vol[idx[0].get(), idx[1].get(), idx[2].get()].get()
 
-    # Free GPU memory
+    # free gpu mem
     del offpoints, idx, vol
 
     mempool.free_all_blocks()
     pinned_mempool.free_all_blocks()
-
     return img
+
+
+
 
