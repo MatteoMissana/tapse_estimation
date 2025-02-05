@@ -341,6 +341,37 @@ def center_volume(volume, target_x, target_y):
 
     return padded_volume
 
+def crop_black_borders(volume):
+    """
+    Crops the black (zero-valued) borders from the volume along the x and y dimensions using CuPy.
+    
+    Parameters:
+        volume (cupy.ndarray): A 3D CuPy array of shape (x, y, z).
+    
+    Returns:
+        cupy.ndarray: The cropped volume with borders removed along x and y.
+    """
+    # Compute a 2D mask to check where at least one voxel along the z-axis is non-zero
+    mask = volume.any(axis=2)
+
+    # Get the non-zero indices along x and y
+    x_nonzero = cp.where(mask.any(axis=1))[0]
+    y_nonzero = cp.where(mask.any(axis=0))[0]
+    
+    # If the entire volume is zero, return an empty volume
+    if x_nonzero.size == 0 or y_nonzero.size == 0:
+        return volume[0:0, 0:0, :]
+    
+    # Get min and max bounds for x and y
+    x_min, x_max = x_nonzero[0], x_nonzero[-1]
+    y_min, y_max = y_nonzero[0], y_nonzero[-1]
+
+    # Crop the volume using the computed bounds
+    cropped_volume = volume[x_min:x_max+1, y_min:y_max+1, :]
+    
+    return cropped_volume
+
+
 def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     '''
     Extracts 2D slices from a 3D medical volume after aligning the right ventricle along the z-axis.
@@ -383,7 +414,7 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
     
     # Rotate to finalize alignment
-    volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+    volume_superimposed = rotate(volume_superimposed, -alpha, axes=(0,2), reshape=True, 
                                  order=3, mode='constant', cval=0.0, prefilter=True)
     volume = rotate(volume, -alpha, axes=(0,2), reshape=True, 
                     order=3, mode='constant', cval=0.0, prefilter=True)
@@ -407,6 +438,8 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     # Extract and store each slice
     for i, angle in enumerate(degrees):
         imgs[i] = slice_volume_z(volume, angle)
+    
+    imgs = crop_black_borders(imgs.transpose(1,2,0))
 
     return imgs  # Return the extracted slices
 
