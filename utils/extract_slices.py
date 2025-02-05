@@ -1,6 +1,8 @@
 import numpy as np
 from scipy.ndimage import map_coordinates
 import cupy as cp
+from utils.plot import VolumeViewer
+from cupyx.scipy.ndimage import rotate
 
 print(cp.cuda.Device(0).compute_capability)  # Mostra la Compute Capability
 print(cp.cuda.Device(0).attributes)  # Mostra varie info sulla GPU
@@ -256,16 +258,13 @@ def rotate_volume(volume, R):
 
 
 
-def slice_volume_z(vol, theta, center=None):
+def slice_volume_z(vol, theta):
     mempool = cp.get_default_memory_pool()
     pinned_mempool = cp.get_default_pinned_memory_pool()
     # unit vector
     e_xy = [[1.0, 0.0, 0.0], [0.0, np.cos(theta), np.sin(theta)]]
 
-    if center is None:
-        center = cp.array([vol.shape[0] / 2, vol.shape[1] / 2, vol.shape[2] / 2], dtype=float)
-    else:
-        center = cp.array([center[0], center[1], vol.shape[2] / 2], dtype=float)
+    center = cp.array([vol.shape[0] / 2, vol.shape[1] / 2, vol.shape[2] / 2], dtype=float)
 
     e_xy = cp.array(e_xy)
     e_xy = e_xy / cp.linalg.norm(e_xy, axis=1)[:, cp.newaxis]
@@ -305,15 +304,110 @@ def slice_volume_z(vol, theta, center=None):
                                  ]), axis=0)
 
     idx[:, offpoints] = 0
-    img = vol[idx[0].get(), idx[1].get(), idx[2].get()].get()
+    img = vol[idx[0], idx[1], idx[2]]
 
     # free gpu mem
     del offpoints, idx, vol
 
     mempool.free_all_blocks()
     pinned_mempool.free_all_blocks()
+
+    img = cp.rot90(img)
     return img
 
 
+def center_volume(volume, target_x, target_y):
+    '''
+    pads the volume by adding 0 along the x and y axes so that the target x and y are in the center
+    volume: a cupy volume 
+    int: target x, target y: the coordinates you want to center'''
+    X, Y, Z = volume.shape
+
+    pad_x = 2*int((target_x - X / 2))
+    pad_y = 2*int((target_y - Y / 2))
+
+
+    pad_x_before = max(0, 0-pad_x)
+    pad_x_after = max(0, pad_x)
+
+    pad_y_before = max(0, 0-pad_y)
+    pad_y_after = max(0, pad_y)
+
+    padded_volume = cp.pad(volume, 
+                            ((pad_x_before, pad_x_after), 
+                             (pad_y_before, pad_y_after), 
+                             (0, 0)), 
+                            mode='constant', constant_values=0)
+
+    return padded_volume
+
+def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
+    '''
+    Extracts 2D slices from a 3D medical volume after aligning the right ventricle along the z-axis.
+
+    This function performs three main steps:
+    1. **Alignment**: The volume is rotated in the YZ and XZ planes to ensure the ventricle is aligned with the z-axis.
+    2. **Centering**: The user selects the tricuspid valve center in the XY-plane, ensuring slices pass through this point.
+    3. **Slice Extraction**: Slices are taken with planes parallel to the z-axis, rotated at the specified degrees.
+
+    Parameters:
+    - input (numpy array): The 3D volume containing the medical image.
+    - ground_truth (numpy array): The 3D segmentation of the right ventricle.
+    - degrees (numpy array): An array containing rotation angles for extracting slices.
+
+    Returns:
+    - A 3D CuPy array containing the extracted slices.
+    '''
+
+    # Superimpose the segmentation onto the input volume for visualization
+    volume_superimposed = input + ground_truth * 50
+
+    # Convert to CuPy arrays for GPU processing
+    volume_superimposed = cp.asarray(volume_superimposed)
+    volume = cp.asarray(input)
+
+    # Step 1: Align the volume in the YZ-plane
+    viewer = VolumeViewer(volume_superimposed)
+    viewer.show()
+    alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
+    
+    # Rotate to align along the z-axis
+    volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+                                 order=3, mode='constant', cval=0.0, prefilter=True)
+    volume = rotate(volume, alpha, axes=(1,2), reshape=True, 
+                    order=3, mode='constant', cval=0.0, prefilter=True)
+
+    # Step 2: Align the volume in the XZ-plane
+    viewer = VolumeViewer(volume_superimposed)
+    viewer.show()
+    alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
+    
+    # Rotate to finalize alignment
+    volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+                                 order=3, mode='constant', cval=0.0, prefilter=True)
+    volume = rotate(volume, -alpha, axes=(0,2), reshape=True, 
+                    order=3, mode='constant', cval=0.0, prefilter=True)
+
+    # Step 3: Select the tricuspid valve center in the XY-plane
+    viewer = VolumeViewer(volume_superimposed)
+    viewer.show()
+    target_x = viewer.clicked_points[0][1]
+    target_y = viewer.clicked_points[0][0]
+
+    # Center the volume based on the selected point
+    volume = center_volume(volume_superimposed, target_x, target_y)
+
+    # Step 4: Extract slices passing through the selected point, aligned with the z-axis
+    first_slice = slice_volume_z(volume, degrees[0])
+    height, width = first_slice.shape  # Get dimensions of a single slice
+
+    # Initialize an empty CuPy array for the slices
+    imgs = cp.zeros((len(degrees), height, width), dtype=first_slice.dtype)
+
+    # Extract and store each slice
+    for i, angle in enumerate(degrees):
+        imgs[i] = slice_volume_z(volume, angle)
+
+    return imgs  # Return the extracted slices
 
 
