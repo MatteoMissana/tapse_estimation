@@ -4,10 +4,6 @@ import cupy as cp
 from utils.plot import VolumeViewer
 from cupyx.scipy.ndimage import rotate
 
-print(cp.cuda.Device(0).compute_capability)  # Mostra la Compute Capability
-print(cp.cuda.Device(0).attributes)  # Mostra varie info sulla GPU
-
-
 def extract_planes(volume, line_point, line_direction, angles):
     """
     Extracts 2D images from a 3D volume for planes containing a given line,
@@ -205,7 +201,6 @@ def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None)
 
     return angle_deg
 
-import cupy as cp
 
 def signed_angle_between_vectors_gpu(vec, target=cp.array([0, 0, 1]), ref_axis=None):
     """
@@ -312,7 +307,6 @@ def slice_volume_z(vol, theta):
     mempool.free_all_blocks()
     pinned_mempool.free_all_blocks()
 
-    img = cp.rot90(img)
     return img
 
 
@@ -322,7 +316,7 @@ def center_volume(volume, target_x, target_y):
     volume: a cupy volume 
     int: target x, target y: the coordinates you want to center'''
     X, Y, Z = volume.shape
-
+    
     pad_x = 2*int((target_x - X / 2))
     pad_y = 2*int((target_y - Y / 2))
 
@@ -371,7 +365,6 @@ def crop_black_borders(volume):
     
     return cropped_volume
 
-
 def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     '''
     Extracts 2D slices from a 3D medical volume after aligning the right ventricle along the z-axis.
@@ -400,13 +393,20 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     # Step 1: Align the volume in the YZ-plane
     viewer = VolumeViewer(volume_superimposed)
     viewer.show()
+    print(viewer.unit_vectors[0])
     alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
     
     # Rotate to align along the z-axis
-    volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+    if viewer.unit_vectors[0][0] == 0:
+        volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+                                    order=3, mode='constant', cval=0.0, prefilter=True)
+        volume = rotate(volume, alpha, axes=(1,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
+    elif viewer.unit_vectors[0][1] == 0:
+        volume_superimposed = rotate(volume_superimposed, -alpha, axes=(0,2), reshape=True, 
                                  order=3, mode='constant', cval=0.0, prefilter=True)
-    volume = rotate(volume, alpha, axes=(1,2), reshape=True, 
-                    order=3, mode='constant', cval=0.0, prefilter=True)
+        volume = rotate(volume, -alpha, axes=(0,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
 
     # Step 2: Align the volume in the XZ-plane
     viewer = VolumeViewer(volume_superimposed)
@@ -414,10 +414,16 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
     
     # Rotate to finalize alignment
-    volume_superimposed = rotate(volume_superimposed, -alpha, axes=(0,2), reshape=True, 
+    if viewer.unit_vectors[0][0] == 0:
+        volume_superimposed = rotate(volume_superimposed, alpha, axes=(1,2), reshape=True, 
+                                    order=3, mode='constant', cval=0.0, prefilter=True)
+        volume = rotate(volume, alpha, axes=(1,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
+    elif viewer.unit_vectors[0][1] == 0:
+        volume_superimposed = rotate(volume_superimposed, -alpha, axes=(0,2), reshape=True, 
                                  order=3, mode='constant', cval=0.0, prefilter=True)
-    volume = rotate(volume, -alpha, axes=(0,2), reshape=True, 
-                    order=3, mode='constant', cval=0.0, prefilter=True)
+        volume = rotate(volume, -alpha, axes=(0,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
 
     # Step 3: Select the tricuspid valve center in the XY-plane
     viewer = VolumeViewer(volume_superimposed)
@@ -427,6 +433,7 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
 
     # Center the volume based on the selected point
     volume = center_volume(volume_superimposed, target_x, target_y)
+    volume = volume.transpose(2, 0, 1)
 
     # Step 4: Extract slices passing through the selected point, aligned with the z-axis
     first_slice = slice_volume_z(volume, degrees[0])
@@ -439,7 +446,8 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     for i, angle in enumerate(degrees):
         imgs[i] = slice_volume_z(volume, angle)
     
-    imgs = crop_black_borders(imgs.transpose(1,2,0))
+    imgs = imgs.transpose(1,2,0)
+    # imgs = crop_black_borders(imgs)
 
     return imgs  # Return the extracted slices
 
