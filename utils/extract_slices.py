@@ -3,178 +3,7 @@ from scipy.ndimage import map_coordinates
 import cupy as cp
 from utils.plot import VolumeViewer
 from cupyx.scipy.ndimage import rotate
-
-def extract_planes(volume, line_point, line_direction, angles):
-    """
-    Extracts 2D images from a 3D volume for planes containing a given line,
-    and rotates the plane around the line's direction at specific angle intervals.
-
-    Parameters:
-        volume (numpy.ndarray): 3D array of shape (322, 322, 300).
-        line_point (tuple): Point on the line, given as (x, y, z).
-        line_direction (tuple): Direction of the line, given as (dx, dy, dz).
-        angles (list or numpy.ndarray): List of angles (in degrees) between the planes to extract.
-
-    Returns:
-        list: List of 2D arrays, each representing an extracted image.
-    """
-    extracted_images = []
-
-    # Normalize the direction of the line
-    line_direction = np.array(line_direction) / np.linalg.norm(line_direction)
-
-    # Find a random perpendicular vector to the line
-    perpendicular_vector = find_perpendicular_vector(line_direction)
-
-    # Define the initial plane's basis: two perpendicular vectors to the line
-    plane_u = perpendicular_vector  # First vector on the plane
-
-    # Normalize the basis vectors
-    plane_u /= np.linalg.norm(plane_u)
-
-    # Define a grid for the initial plane
-    size = int(max(volume.shape)*np.sqrt(2))
-
-    for angle in angles:
-        # Rotate the plane basis vectors around the line direction
-        angle_rad = np.deg2rad(angle)
-        rotation_matrix = get_rotation_matrix(line_direction, angle_rad)
-
-        rotated_u = rotation_matrix @ plane_u
-
-        interpolated_values = extract_slice(volume, line_point, rotated_u, size=size)
-
-        extracted_images.append(interpolated_values)
-
-    return extracted_images
-
-
-def find_perpendicular_vector(direction):
-    """
-    Finds a random vector perpendicular to the given direction vector.
-
-    Parameters:
-        direction (numpy.ndarray): Direction vector (dx, dy, dz).
-
-    Returns:
-        numpy.ndarray: A vector perpendicular to the given direction.
-    """
-    direction = np.array(direction)
-    if direction[2] != 0:  # General case
-        perpendicular = np.array([1, 1, -(direction[0] + direction[1]) / direction[2]])
-    elif direction[1] != 0:  # If dz == 0 but dy != 0
-        perpendicular = np.array([1, -(direction[0] + direction[2]) / direction[1], 1])
-    else:  # If dz == 0 and dy == 0 (dx != 0)
-        perpendicular = np.array([0, 1, 0])
-    return perpendicular / np.linalg.norm(perpendicular)
-
-
-def get_rotation_matrix(axis, angle):
-    """
-    Computes the 3D rotation matrix around an axis.
-
-    Parameters:
-        axis (numpy.ndarray): Rotation axis (3,).
-        angle (float): Rotation angle in radians.
-
-    Returns:
-        numpy.ndarray: 3x3 rotation matrix.
-    """
-    axis = axis / np.linalg.norm(axis)
-    cos_a = np.cos(angle)
-    sin_a = np.sin(angle)
-    ux, uy, uz = axis
-
-    rotation_matrix = np.array([
-        [cos_a + ux ** 2 * (1 - cos_a), ux * uy * (1 - cos_a) - uz * sin_a, ux * uz * (1 - cos_a) + uy * sin_a],
-        [uy * ux * (1 - cos_a) + uz * sin_a, cos_a + uy ** 2 * (1 - cos_a), uy * uz * (1 - cos_a) - ux * sin_a],
-        [uz * ux * (1 - cos_a) - uy * sin_a, uz * uy * (1 - cos_a) + ux * sin_a, cos_a + uz ** 2 * (1 - cos_a)]
-    ])
-
-    return rotation_matrix
-
-def extract_slice(volume, plane_point, plane_normal, size=322):
-    """
-    Extracts a slice from a 3D volume corresponding to a specified plane.
-
-    Parameters:
-        volume (numpy.ndarray): 3D array representing the volume.
-        plane_point (tuple): A point on the plane, given as (x, y, z).
-        plane_normal (tuple): The normal vector of the plane, given as (nx, ny, nz).
-        size (int): The size of the output slice (default is 322).
-
-    Returns:
-        numpy.ndarray: 2D array representing the extracted slice.
-    """
-    # Normalize the plane normal
-    plane_normal = np.array(plane_normal) / np.linalg.norm(plane_normal)
-
-    # Find two orthogonal vectors in the plane
-    # Start by finding one vector perpendicular to the normal
-    perp_vector1 = find_perpendicular_vector(plane_normal)
-
-    # Find the second vector using a cross product
-    perp_vector2 = np.cross(plane_normal, perp_vector1)
-
-    # Normalize the two vectors
-    perp_vector1 /= np.linalg.norm(perp_vector1)
-    perp_vector2 /= np.linalg.norm(perp_vector2)
-
-    # Create a grid in the plane using the two perpendicular vectors
-    grid_u, grid_v = np.meshgrid(
-        np.linspace(-size / 2, size / 2, size),
-        np.linspace(-size / 2, size / 2, size)
-    )
-
-    # Compute the coordinates of the grid points in 3D space
-    grid_points = (
-        plane_point[0] + grid_u * perp_vector1[0] + grid_v * perp_vector2[0],
-        plane_point[1] + grid_u * perp_vector1[1] + grid_v * perp_vector2[1],
-        plane_point[2] + grid_u * perp_vector1[2] + grid_v * perp_vector2[2]
-    )
-
-    # Interpolate the values of the volume at the grid points
-    slice_values = map_coordinates(
-        volume,
-        [grid_points[0].ravel(),
-         grid_points[1].ravel(),
-         grid_points[2].ravel()],
-        order=1,
-        mode='constant',
-        cval=0
-    )
-
-    # Reshape the result into a 2D array
-    return slice_values.reshape(size, size)
-
-
-def rotation_matrix_from_vectors(vec, target=np.array([0, 0, 1])):
-    """
-    Compute the rotation matrix that aligns `vec` with the `target` vector.
-    Uses Rodrigues' rotation formula.
-
-    :param vec: Source vector (must be a unit vector)
-    :param target: Target vector (default: [0, 0, 1])
-    :return: 3x3 rotation matrix
-    """
-    vec = vec / np.linalg.norm(vec)  # Ensure it's a unit vector
-    target = target / np.linalg.norm(target)
-
-    v = np.cross(vec, target)  # Rotation axis
-    print(v)
-    c = np.dot(vec, target)  # Cosine of the angle
-    s = np.linalg.norm(v)  # Sine of the angle
-
-    if s == 0:  # Already aligned
-        return np.eye(3)
-
-    # Skew-symmetric cross-product matrix of v
-    vx = np.array([[0, -v[2], v[1]],
-                   [v[2], 0, -v[0]],
-                   [-v[1], v[0], 0]])
-
-    R = np.eye(3) + vx + (vx @ vx) * ((1 - c) / (s ** 2))
-    return R
+import math as m
 
 def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None):
     """
@@ -251,7 +80,119 @@ def rotate_volume(volume, R):
 
     return rotated_volume.reshape(volume.shape)
 
+def slice_volume_x(vol, theta):
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+    # unit vector
+    e_xz = [[np.sin(theta), np.cos(theta), 0.0], [0.0, 0.0, 1.0]]
 
+    center = cp.array([0, vol.shape[1] / 2, vol.shape[2] / 2], dtype=float)
+
+    e_xz = cp.array(e_xz)
+    e_xz = e_xz / cp.linalg.norm(e_xz, axis=1)[:, cp.newaxis]
+
+    # R: rotation matrix: data_coords = center + r @ slice_coords
+    ey = cp.cross(e_xz[0], e_xz[1])
+    r = cp.array([e_xz[0], ey, e_xz[1]], dtype=cp.float32).T
+
+    # free gpu mem
+    del e_xz, ey
+
+    # setup slice points P with coordinates (X, Y, 0)
+    mx, mz = int(vol.shape[0]), int(vol.shape[2])
+    xs = cp.arange(0.5, 0.5 + mx)
+    zs = cp.arange(0.5 - mz / 2, 0.5 + mz / 2)
+    pp = cp.zeros((3, mx, mz), dtype=cp.float32)
+    pp[0, :, :] = xs.reshape(mx, 1)
+    pp[2, :, :] = zs.reshape(1, mz)
+
+    # Transform to data coordinates (x, y, z) - idx.shape == (3, mx, mx)
+    # pure numpy solution with nearest-neighbor interpolation
+    idx = cp.einsum('il,ljk->ijk', r, pp) + (0.5 + center.reshape(3, 1, 1))
+
+    # free gpu mem
+    del r, xs, zs, pp, center
+
+    # computation of indices without einstein summation
+    # idx = cp.zeros((3, mx, mz), dtype=cp.float32)
+    # for i in range(r.shape[0]):
+    #     for j in range(pp.shape[1]):
+    #         for k in range(pp.shape[2]):
+    #             idx[i, j, k] = r[i, 0]*pp[0, j, k] + r[i, 1]*pp[1, j, k] + r[i, 2]*pp[2, j, k]
+    # idx += (0.5 + center.reshape(3, 1, 1))
+
+    idx = idx.astype(cp.int16)
+    # Find out which coordinates are out of range - shape (mx, mx)
+    offpoints = cp.any(cp.array([idx[0, :, :] < 0,
+                                 idx[0, :, :] >= vol.shape[0],
+                                 idx[1, :, :] < 0,
+                                 idx[1, :, :] >= vol.shape[1],
+                                 idx[2, :, :] < 0,
+                                 idx[2, :, :] >= vol.shape[2]
+                                 ]), axis=0)
+
+    idx[:, offpoints] = 0
+    img = vol[idx[0], idx[1], idx[2]]
+
+    # free gpu mem
+    del offpoints, idx, vol
+
+    mempool.free_all_blocks()
+    pinned_mempool.free_all_blocks()
+    return img
+
+def slice_volume_y(vol, theta):
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+    # unit vector
+    e_xy = [[np.sin(theta), 0.0, np.cos(theta)], [0.0, 1.0, 0.0]]
+
+    center = cp.array([0, vol.shape[1] / 2, vol.shape[2] / 2], dtype=float)
+
+    e_xy = cp.array(e_xy)
+    e_xy = e_xy / cp.linalg.norm(e_xy, axis=1)[:, cp.newaxis]
+
+    # R: rotation matrix: data_coords = center + r @ slice_coords
+    ez = cp.cross(e_xy[0], e_xy[1])
+    r = cp.array([e_xy[0], e_xy[1], ez], dtype=cp.float32).T
+
+    # free gpu mem
+    del e_xy, ez
+
+    # setup slice points P with coordinates (X, Y, 0)
+    mx, my = int(vol.shape[0]), int(vol.shape[1])
+    xs = cp.arange(0.5, 0.5 + mx)
+    ys = cp.arange(0.5 - my / 2, 0.5 + my / 2)
+    pp = cp.zeros((3, mx, my), dtype=cp.float32)
+    pp[0, :, :] = xs.reshape(mx, 1)
+    pp[1, :, :] = ys.reshape(1, my)
+
+    # Transform to data coordinates (x, y, z) - idx.shape == (3, mx, mx)
+    # pure numpy solution with nearest-neighbor interpolation
+    idx = cp.einsum('il,ljk->ijk', r, pp) + (0.5 + center.reshape(3, 1, 1))
+
+    # free gpu mem
+    del r, xs, ys, pp, center
+
+    idx = idx.astype(cp.int16)
+    # Find out which coordinates are out of range - shape (mx, mx)
+    offpoints = cp.any(cp.array([idx[0, :, :] < 0,
+                                 idx[0, :, :] >= vol.shape[0],
+                                 idx[1, :, :] < 0,
+                                 idx[1, :, :] >= vol.shape[1],
+                                 idx[2, :, :] < 0,
+                                 idx[2, :, :] >= vol.shape[2]
+                                 ]), axis=0)
+
+    idx[:, offpoints] = 0
+    img = vol[idx[0], idx[1], idx[2]]
+
+    # free gpu mem
+    del offpoints, idx, vol
+
+    mempool.free_all_blocks()
+    pinned_mempool.free_all_blocks()
+    return img
 
 def slice_volume_z(vol, theta):
     mempool = cp.get_default_memory_pool()
@@ -451,4 +392,219 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
 
     return imgs  # Return the extracted slices
 
+def rz(theta):  # true rx, but first dim in US volume is z-axis
+    return np.array([[1, 0, 0, 0],
+                     [0, m.cos(theta), -m.sin(theta), 0],
+                     [0, m.sin(theta), m.cos(theta), 0],
+                     [0, 0, 0, 1]])
 
+
+def ry(theta):
+    return np.array([[m.cos(theta), 0, m.sin(theta), 0],
+                     [0, 1, 0, 0],
+                     [-m.sin(theta), 0, m.cos(theta), 0],
+                     [0, 0, 0, 1]])
+
+
+def rx(theta):  # true rz, but first dim in US volume is z-axis
+    return np.array([[m.cos(theta), -m.sin(theta), 0, 0],
+                     [m.sin(theta), m.cos(theta), 0, 0],
+                     [0, 0, 1, 0],
+                     [0, 0, 0, 1]])
+
+def t(tx, ty, tz):
+    return np.array([[1, 0, 0, tx],
+                     [0, 1, 0, ty],
+                     [0, 0, 1, tz],
+                     [0, 0, 0, 1]])
+
+
+def rotate_about_axis(axis, sequence, rot_angles):
+    print('Rotating volume about ' + axis + ' axis.')
+    mempool = cp.get_default_memory_pool()
+    pinned_mempool = cp.get_default_pinned_memory_pool()
+
+    # translate to probe center, to rotate about centerline
+    tm_center = t(sequence.shape[1] / 2, sequence.shape[2] / 2, sequence.shape[3] / 2)
+    inv_tm_center = np.linalg.inv(tm_center)
+
+    if axis == 'x':
+        rot_imgs = np.ndarray((len(rot_angles), sequence.shape[0], sequence.shape[1], sequence.shape[3]))
+    else:
+        rot_imgs = np.ndarray((len(rot_angles), sequence.shape[0], sequence.shape[1], sequence.shape[2]))
+    trf_mats = np.ndarray((len(rot_angles), 4, 4))
+
+    for frame in range(sequence.shape[0]):
+
+        print('Processing frame ' + str(frame + 1) + ' of ' + str(sequence.shape[0]) + '.')
+
+        # rotate volume about z axis 
+        for idx, angle in enumerate(rot_angles):
+            theta = m.radians(angle % 360)
+            vol_gpu = cp.array(sequence[frame][:][:][:])
+
+            # extract image
+            if axis == 'x':
+                rot_img = slice_volume_x(vol_gpu, theta)
+            elif axis == 'y':
+                rot_img = slice_volume_y(vol_gpu, theta)
+            elif axis == 'z':
+                rot_img = slice_volume_z(vol_gpu, theta)
+
+            # rot_imgs[idx, frame, :, :] = np.flipud(cp.asnumpy(rot_img))
+            rot_imgs[idx, frame, :, :] = cp.asnumpy(rot_img)
+
+            # free gpu mem
+            del vol_gpu, rot_img
+
+            # save transformation matrix for inverse transformation of landmarks
+            if frame == 0:
+                rm_z = rz(theta)
+                trf_mats[idx, :, :] = np.linalg.multi_dot([tm_center, rm_z, inv_tm_center])
+
+            # VisualizeVolume.display_rgb_image(rot_imgs[idx, frame, :, :], "extracted image after " + str(angle) +
+            # " degrees rotation about z axis")
+
+    mempool.free_all_blocks()
+    pinned_mempool.free_all_blocks()
+    return rot_imgs, trf_mats
+
+def extract_axis_from_points(p1, p2):
+    """
+    Compute the unit vector (axis) that passes through two points.
+
+    Parameters:
+        p1 (cp.ndarray): First point in 3D space [x1, y1, z1].
+        p2 (cp.ndarray): Second point in 3D space [x2, y2, z2].
+
+    Returns:
+        cp.ndarray: A unit vector representing the axis direction.
+    """
+    
+    # Compute direction vector
+    axis = p2 - p1
+    
+    # Normalize the vector (avoid division by zero)
+    norm = cp.linalg.norm(axis)
+    if norm > 0:
+        axis /= norm
+
+    return axis
+
+
+def get_rotation_matrix_gpu(axis, angle_deg):
+    """
+    Compute a 3x3 rotation matrix given an axis and an angle using CuPy.
+
+    Parameters:
+        axis (array-like): Rotation axis [x, y, z] (should be a unit vector).
+        angle_deg (float): Rotation angle in degrees.
+
+    Returns:
+        cp.ndarray: 3x3 rotation matrix (GPU array).
+    """
+    axis = axis / cp.linalg.norm(axis)  # Normalize the axis
+    angle_rad = cp.radians(angle_deg)  # Convert angle to radians
+
+    # Rodrigues' rotation formula (axis-angle to rotation matrix)
+    cos_a = cp.cos(angle_rad)
+    sin_a = cp.sin(angle_rad)
+    one_minus_cos = 1 - cos_a
+
+    x, y, z = axis
+    rotation_matrix = cp.array([
+        [cos_a + x*x*one_minus_cos,      x*y*one_minus_cos - z*sin_a, x*z*one_minus_cos + y*sin_a],
+        [y*x*one_minus_cos + z*sin_a, cos_a + y*y*one_minus_cos,      y*z*one_minus_cos - x*sin_a],
+        [z*x*one_minus_cos - y*sin_a, z*y*one_minus_cos + x*sin_a, cos_a + z*z*one_minus_cos]
+    ], dtype=cp.float32)
+
+    return rotation_matrix
+
+def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np.linspace(0, 2*np.pi, 10)):
+    '''
+    Extracts 2D slices from a 3D medical volume after aligning the right ventricle along the z-axis.
+
+    This function performs three main steps:
+    1. **Alignment**: The volume is rotated in the YZ and XZ planes to ensure the ventricle is aligned with the z-axis.
+    2. **Centering**: The user selects the tricuspid valve center in the XY-plane, ensuring slices pass through this point.
+    3. **Slice Extraction**: Slices are taken with planes parallel to the z-axis, rotated at the specified degrees.
+
+    Parameters:
+    - input (numpy array): The 3D volume containing the medical image.
+    - ground_truth (numpy array): The 3D segmentation of the right ventricle.
+    - degrees (numpy array): An array containing rotation angles for extracting slices.
+
+    Returns:
+    - A 3D CuPy array containing the extracted slices.
+    '''
+
+    # Superimpose the segmentation onto the input volume for visualization
+    volume_superimposed = input + ground_truth * 50
+
+    # Convert to CuPy arrays for GPU processing
+    volume_superimposed = cp.asarray(volume_superimposed)
+    volume = cp.asarray(input)
+
+    axis = extract_axis_from_points(tric_valve, apex)
+    axis_x= axis
+    axis_x[1] = 0
+    norm = cp.linalg.norm(axis_x)
+    if norm > 0:
+        axis_x /= norm
+    axis_y= axis
+    axis_y[0] = 0
+    norm = cp.linalg.norm(axis_y)
+    if norm > 0:
+        axis_y /= norm
+    alpha_x = signed_angle_between_vectors_gpu(axis_x)
+    alpha_y = signed_angle_between_vectors_gpu(axis_y)
+
+    #rotation_axis = cp.cross(cp.asarray([0,0,1]), axis)
+
+    volume_rotated = rotate(volume_superimposed, alpha_x, axes=(1,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
+    
+    volume_rotated = rotate(volume_superimposed, -alpha_y, axes=(0,2), reshape=True, 
+                        order=3, mode='constant', cval=0.0, prefilter=True)
+    
+
+    '''rot_mat = get_rotation_matrix_gpu(rotation_axis, angle_deg=alpha)
+
+    new_tric = rot(volume=volume, rot_vol=volume_rotated, xyz=tric_valve, rot_mat=rot_mat)'''
+
+    # Step 1: Align the volume in the YZ-plane
+    viewer = VolumeViewer(volume_rotated)
+    viewer.show()
+
+    target_x = viewer.clicked_points[0][1]
+    target_y = viewer.clicked_points[0][0]
+
+    # Center the volume based on the selected point
+    volume_rotated = center_volume(volume_rotated, target_x, target_y)
+    volume_rotated = volume_rotated.transpose(2, 0, 1)
+
+    # Step 4: Extract slices passing through the selected point, aligned with the z-axis
+    first_slice = slice_volume_z(volume_rotated, degrees[0])
+    height, width = first_slice.shape  # Get dimensions of a single slice
+
+    # Initialize an empty CuPy array for the slices
+    imgs = cp.zeros((len(degrees), height, width), dtype=first_slice.dtype)
+
+    # Extract and store each slice
+    for i, angle in enumerate(degrees):
+        imgs[i] = slice_volume_z(volume_rotated, angle)
+    
+    imgs = imgs.transpose(1,2,0)
+    # imgs = crop_black_borders(imgs)
+
+    return imgs  # Return the extracted slices
+
+def rot(volume, rot_vol, xyz, rot_mat): 
+    ''' in teoria trova le coordinate nel volume ruotato'''
+    org_center = (cp.array(volume.shape[:3])-1)/2.
+    rot_center = (cp.array(rot_vol.shape[:3])-1)/2.
+    org = xyz-org_center
+
+    new = rot_mat @ org
+    print(new)
+    return new+rot_center
