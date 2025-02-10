@@ -5,26 +5,48 @@ import cupy as cp
 from utils.extract_slices import extract_slices_from_points
 
 
-
-
 file = r"D:\mmissana\data\4DRVQ_Jinyang\voxels\101001.h5"
 
-def print_structure(name, obj):
-    print(name, obj)
-
+def mesh_point_to_voxel(point, origin, delta):
+    """
+    Convert a point from mesh coordinates to voxel coordinates.
+    
+    Parameters:
+    - point: np.array of shape (3,), the point in mesh coordinates.
+    - origin: np.array of shape (3,), the origin of the voxel grid in mesh coordinates.
+    - delta: np.array of shape (3,3), the transformation matrix from voxel to mesh coordinates.
+    
+    Returns:
+    - voxel_idx: np.array of shape (3,), the voxel index corresponding to the input point.
+    """
+    inv_delta = np.linalg.inv(delta.T)  # Invert the transformation matrix
+    voxel_idx = inv_delta @ (point - origin)  # Apply the inverse transformation
+    return np.round(voxel_idx).astype(int)  # Round to nearest voxel index
 
 with h5py.File(file, 'r') as h5_file:
-    h5_file.visititems(print_structure)
     image_0 = h5_file['Input']['grid00'][:]
     image_1 = h5_file['GroundTruth']['grid00'][:]
-    volume_superimposed = image_0 + image_1 * 50
-    volume = cp.asarray(volume_superimposed)
+    vres = h5_file["VolumeInfo"]["resolution"][()]
+    origin = h5_file["VolumeInfo"]["origin"][()]
+    directions = h5_file["VolumeInfo"]["directions"][()]
 
-tricuspid_valve = cp.asarray([-0.019, -0.077, -0.002])
-apex = cp.asarray([0.050, -0.130, -0.024])
+tricuspid_valve = np.asarray([-0.019, -0.077, -0.004]) # both points coordinates come from 3d slicer
+apex = np.asarray([0.050, -0.131, -0.023])
+
+delta = vres * directions / np.linalg.norm(directions, axis=0)
+
+coord_tric = mesh_point_to_voxel(tricuspid_valve, origin, delta)
+print(coord_tric)
+coord_apex = mesh_point_to_voxel(apex, origin, delta)
+print(coord_apex)
+
+
+coord_tric= cp.asarray(coord_tric)
+print(coord_tric)
+coord_apex= cp.asarray(coord_apex)
 
 degrees = np.linspace(np.pi, 2*np.pi, 100)
-imgs = extract_slices_from_points(image_0, image_1, tricuspid_valve, apex, degrees)
+imgs = extract_slices_from_points(image_0, image_1, tric_valve=coord_tric, apex=coord_apex, degrees=degrees)
 
 viewer = VolumeViewer(imgs)
 viewer.show()

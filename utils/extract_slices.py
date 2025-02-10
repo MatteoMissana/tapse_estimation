@@ -2,7 +2,7 @@ import numpy as np
 from scipy.ndimage import map_coordinates
 import cupy as cp
 from utils.plot import VolumeViewer
-from cupyx.scipy.ndimage import rotate
+from cupyx.scipy.ndimage import rotate, affine_transform
 import math as m
 
 def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None):
@@ -546,27 +546,31 @@ def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np
     volume = cp.asarray(input)
 
     axis = extract_axis_from_points(tric_valve, apex)
-    axis_x= axis
-    axis_x[1] = 0
-    norm = cp.linalg.norm(axis_x)
-    if norm > 0:
-        axis_x /= norm
-    axis_y= axis
-    axis_y[0] = 0
-    norm = cp.linalg.norm(axis_y)
-    if norm > 0:
-        axis_y /= norm
-    alpha_x = signed_angle_between_vectors_gpu(axis_x)
-    alpha_y = signed_angle_between_vectors_gpu(axis_y)
+    print('axis',axis)
 
-    #rotation_axis = cp.cross(cp.asarray([0,0,1]), axis)
+    axis_xz = axis.copy()
+    axis_xz[1] = 0
+    axis_xz = axis_xz / cp.linalg.norm(axis_xz)
+    print(axis_xz)
 
-    volume_rotated = rotate(volume_superimposed, alpha_x, axes=(1,2), reshape=True, 
-                        order=3, mode='constant', cval=0.0, prefilter=True)
+    axis_yz = axis.copy()
+    axis_yz[0] = 0
+    axis_yz = axis_yz / cp.linalg.norm(axis_yz)
+    print(axis_yz)
+
+
+    alpha_xz = signed_angle_between_vectors_gpu(axis_xz)
+    print(alpha_xz)
+    alpha_yz = signed_angle_between_vectors_gpu(axis_yz)
+    print(alpha_yz)
     
-    volume_rotated = rotate(volume_superimposed, -alpha_y, axes=(0,2), reshape=True, 
-                        order=3, mode='constant', cval=0.0, prefilter=True)
+    volume_superimposed = rotate(volume_superimposed, alpha_xz, axes=(1,2), reshape=True, 
+                                    order=3, mode='constant', cval=0.0, prefilter=True)
     
+    volume_superimposed = rotate(volume_superimposed, -alpha_yz, axes=(0,2), reshape=True, 
+                                    order=3, mode='constant', cval=0.0, prefilter=True)
+    
+    volume_rotated=volume_superimposed
 
     '''rot_mat = get_rotation_matrix_gpu(rotation_axis, angle_deg=alpha)
 
