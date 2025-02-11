@@ -19,9 +19,9 @@ def mesh_point_to_voxel(point, origin, delta):
     Returns:
     - voxel_idx: np.array of shape (3,), the voxel index corresponding to the input point.
     """
-    inv_delta = np.linalg.inv(delta.T)  # Invert the transformation matrix
+    inv_delta = np.linalg.inv(delta)  # Invert the transformation matrix
     voxel_idx = inv_delta @ (point - origin)  # Apply the inverse transformation
-    return np.round(voxel_idx).astype(int)  # Round to nearest voxel index
+    return voxel_idx#np.round(voxel_idx).astype(int)  # Round to nearest voxel index
 
 with h5py.File(file, 'r') as h5_file:
     image_0 = h5_file['Input']['grid00'][:]
@@ -29,15 +29,17 @@ with h5py.File(file, 'r') as h5_file:
     vres = h5_file["VolumeInfo"]["resolution"][()]
     origin = h5_file["VolumeInfo"]["origin"][()]
     directions = h5_file["VolumeInfo"]["directions"][()]
+    shape = h5_file["VolumeInfo"]["shape"][()]
+    print(shape)
 
 tricuspid_valve = np.asarray([-0.019, -0.077, -0.004]) # both points coordinates come from 3d slicer
 apex = np.asarray([0.050, -0.131, -0.023])
 
 delta = vres * directions / np.linalg.norm(directions, axis=0)
 
-coord_tric = mesh_point_to_voxel(tricuspid_valve, origin, delta)
+coord_tric = abs(mesh_point_to_voxel(tricuspid_valve, origin, delta))
 print(coord_tric)
-coord_apex = mesh_point_to_voxel(apex, origin, delta)
+coord_apex = abs(mesh_point_to_voxel(apex, origin, delta))
 print(coord_apex)
 
 
