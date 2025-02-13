@@ -517,7 +517,6 @@ def get_rotation_matrix_gpu(axis, angle_deg):
         [y*x*one_minus_cos + z*sin_a, cos_a + y*y*one_minus_cos,      y*z*one_minus_cos - x*sin_a],
         [z*x*one_minus_cos - y*sin_a, z*y*one_minus_cos + x*sin_a, cos_a + z*z*one_minus_cos]
     ], dtype=cp.float32)
-
     return rotation_matrix
 
 def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np.linspace(0, 2*np.pi, 10)):
@@ -564,24 +563,37 @@ def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np
     alpha_yz = signed_angle_between_vectors_gpu(axis_yz)
     print(alpha_yz)
     
-    volume_superimposed = rotate(volume_superimposed, alpha_xz, axes=(1,2), reshape=True, 
+    volume_rotatedx = rotate(volume_superimposed, alpha_xz, axes=(1,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
     
-    volume_superimposed = rotate(volume_superimposed, -alpha_yz, axes=(0,2), reshape=True, 
+    rot_mat = get_rotation_matrix_gpu(cp.array([1,0,0]), angle_deg=alpha_xz)
+
+    new_tric_rotx = rot(volume=volume, rot_vol=volume_rotatedx, xyz=tric_valve, rot_mat=rot_mat)
+    print(new_tric_rotx)
+
+    viewer = VolumeViewer(volume_rotatedx)
+    viewer.show()
+
+    volume_rotatedy = rotate(volume_rotatedx, -alpha_yz, axes=(0,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
     
-    volume_rotated=volume_superimposed
+    rot_mat = get_rotation_matrix_gpu(cp.array([0,1,0]), angle_deg=-alpha_yz)
 
-    '''rot_mat = get_rotation_matrix_gpu(rotation_axis, angle_deg=alpha)
-
-    new_tric = rot(volume=volume, rot_vol=volume_rotated, xyz=tric_valve, rot_mat=rot_mat)'''
+    new_tric_roty = rot(volume=volume_rotatedx, rot_vol=volume_rotatedy, xyz=new_tric_rotx, rot_mat=rot_mat)
+    print('new_point:',new_tric_roty)
+    
+    volume_rotated=volume_rotatedy
 
     # Step 1: Align the volume in the YZ-plane
     viewer = VolumeViewer(volume_rotated)
     viewer.show()
 
-    target_x = viewer.clicked_points[0][1]
-    target_y = viewer.clicked_points[0][0]
+    #target_x = viewer.clicked_points[0][1]
+    #target_y = viewer.clicked_points[0][0]
+
+        
+    target_x = new_tric_roty[0]
+    target_y = new_tric_roty[1]
 
     # Center the volume based on the selected point
     volume_rotated = center_volume(volume_rotated, target_x, target_y)
@@ -611,4 +623,4 @@ def rot(volume, rot_vol, xyz, rot_mat):
 
     new = rot_mat @ org
     print(new)
-    return new+rot_center
+    return rot_center+new
