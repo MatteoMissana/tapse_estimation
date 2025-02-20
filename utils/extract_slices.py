@@ -4,6 +4,8 @@ import cupy as cp
 from utils.plot import VolumeViewer
 from cupyx.scipy.ndimage import rotate, affine_transform
 import math as m
+import h5py
+import os
 
 def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None):
     """
@@ -334,7 +336,7 @@ def extract_slices(input, ground_truth, degrees=np.linspace(0, 2*np.pi, 10)):
     # Step 1: Align the volume in the YZ-plane
     viewer = VolumeViewer(volume_superimposed)
     viewer.show()
-    print(viewer.unit_vectors[0])
+    
     alpha = signed_angle_between_vectors_gpu(viewer.unit_vectors[0])
     
     # Rotate to align along the z-axis
@@ -519,6 +521,8 @@ def get_rotation_matrix_gpu(axis, angle_deg):
     ], dtype=cp.float32)
     return rotation_matrix
 
+
+# TODO: verifica le coordinate, e' possibile che x e y siano scambiati all'inizio quando passo gli array alla funzione
 def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np.linspace(0, 2*np.pi, 10)):
     '''
     Extracts 2D slices from a 3D medical volume after aligning the right ventricle along the z-axis.
@@ -545,31 +549,36 @@ def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np
     volume = cp.asarray(input)
 
     axis = extract_axis_from_points(tric_valve, apex)
-    print('axis',axis)
 
     axis_xz = axis.copy()
     axis_xz[1] = 0
     axis_xz = axis_xz / cp.linalg.norm(axis_xz)
-    print(axis_xz)
 
     axis_yz = axis.copy()
     axis_yz[0] = 0
     axis_yz = axis_yz / cp.linalg.norm(axis_yz)
-    print(axis_yz)
 
 
     alpha_xz = signed_angle_between_vectors_gpu(axis_xz)
-    print(alpha_xz)
     alpha_yz = signed_angle_between_vectors_gpu(axis_yz)
-    print(alpha_yz)
+    print('alpha_xz:', alpha_xz)
+    print('alpha_yz:', alpha_yz)
     
     volume_rotatedx = rotate(volume_superimposed, alpha_xz, axes=(1,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
     
-    rot_mat = get_rotation_matrix_gpu(cp.array([1,0,0]), angle_deg=alpha_xz)
+    print(volume_rotatedx.shape)
+    print('ruoto attorno a x')
+    print('nuove coordinate')
+    # For the first rotation (e.g. around the x-axis, affecting Y and Z):
+    new_tric_valve = rotate_pointx(
+        tric_valve,
+        angle_deg=alpha_xz, 
+        orig_shape=volume_superimposed.shape,
+        new_shape=volume_rotatedx.shape
+    )
 
-    new_tric_rotx = rot(volume=volume, rot_vol=volume_rotatedx, xyz=tric_valve, rot_mat=rot_mat)
-    print(new_tric_rotx)
+    print('new_tric_valve:', new_tric_valve)
 
     viewer = VolumeViewer(volume_rotatedx)
     viewer.show()
@@ -577,23 +586,30 @@ def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np
     volume_rotatedy = rotate(volume_rotatedx, -alpha_yz, axes=(0,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
     
-    rot_mat = get_rotation_matrix_gpu(cp.array([0,1,0]), angle_deg=-alpha_yz)
+    print('ruoto attorno a y')
+    print('nuove coordinate')
+    # For the second rotation (e.g. around the y-axis, affecting X and Z):
+    new_tric_valve = rotate_pointy(
+        new_tric_valve,
+        angle_deg=-alpha_yz, 
+        orig_shape=volume_rotatedx.shape,
+        new_shape=volume_rotatedy.shape
+    )
 
-    new_tric_roty = rot(volume=volume_rotatedx, rot_vol=volume_rotatedy, xyz=new_tric_rotx, rot_mat=rot_mat)
-    print('new_point:',new_tric_roty)
-    
+    print('new_tric_valve:', new_tric_valve)
     volume_rotated=volume_rotatedy
 
     # Step 1: Align the volume in the YZ-plane
     viewer = VolumeViewer(volume_rotated)
     viewer.show()
 
-    #target_x = viewer.clicked_points[0][1]
-    #target_y = viewer.clicked_points[0][0]
+    # target_x = viewer.clicked_points[0][1]
+    # target_y = viewer.clicked_points[0][0]
 
-        
-    target_x = new_tric_roty[0]
-    target_y = new_tric_roty[1]
+    target_x = new_tric_valve[0]
+    target_y = new_tric_valve[1]
+    print('target_x:', target_x)
+    print('target_y:', target_y)
 
     # Center the volume based on the selected point
     volume_rotated = center_volume(volume_rotated, target_x, target_y)
@@ -615,12 +631,134 @@ def extract_slices_from_points(input, ground_truth, tric_valve, apex, degrees=np
 
     return imgs  # Return the extracted slices
 
-def rot(volume, rot_vol, xyz, rot_mat): 
-    ''' in teoria trova le coordinate nel volume ruotato'''
-    org_center = (cp.array(volume.shape[:3])-1)/2.
-    rot_center = (cp.array(rot_vol.shape[:3])-1)/2.
-    org = xyz-org_center
+def rotate_pointx(point, angle_deg, orig_shape, new_shape):
+    # Compute centers for the original and new volumes
+    orig_center = (cp.array(orig_shape) - 1) / 2.
+    new_center = (cp.array(new_shape) - 1) / 2.
+    # Translate point relative to original center
+    point_rel = point - orig_center
+    # Create rotation matrix for the given axes and angle
+    angle = cp.asarray(angle_deg)
+    angle = cp.radians(angle)
+    c, s = cp.cos(angle), cp.sin(angle)
+    rot_matrix = cp.array([[1,0,0],
+                           [0, c.get(), -s.get()],
+                           [0, s.get(), c.get()]])
+    # Apply rotation only to the coordinates in the specified axes
+    #coords = point_rel[list(axes)]
+    rotated_coords = rot_matrix @ point_rel
+    # Replace the rotated coordinates
+    point_rel = rotated_coords
+    # Translate back with the new center offset
+    return point_rel + new_center
 
-    new = rot_mat @ org
-    print(new)
-    return rot_center+new
+def rotate_pointy(point, angle_deg, orig_shape, new_shape):
+    # Compute centers for the original and new volumes
+    orig_center = (cp.array(orig_shape) - 1) / 2.
+    new_center = (cp.array(new_shape) - 1) / 2.
+    # Translate point relative to original center
+    point_rel = point - orig_center
+    # Create rotation matrix for the given axes and angle
+    angle = cp.asarray(angle_deg)
+    angle = cp.radians(angle)
+    c, s = cp.cos(angle), cp.sin(angle)
+    rot_matrix = cp.array([[c.get(),0,s.get()],
+                           [0,1,0],
+                           [-s.get(),0,c.get()]])
+    # Apply rotation only to the coordinates in the specified axes
+    #coords = point_rel[list(axes)]
+    rotated_coords = rot_matrix @ point_rel
+    # Replace the rotated coordinates
+    point_rel = rotated_coords
+    # Translate back with the new center offset
+    return point_rel + new_center
+
+def extract_from_hdf5(file_path, save_path, degrees, tric, apex):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with h5py.File(file_path, 'r') as h5_file:
+        grids = list(h5_file['Input'].keys())
+        input_data = h5_file['Input']['grid00'][:]
+        ground_truth = h5_file['GroundTruth']['grid00'][:]
+        vres = h5_file["VolumeInfo"]["resolution"][()]
+        origin = h5_file["VolumeInfo"]["origin"][()]
+        print('origin', origin)
+        directions = h5_file["VolumeInfo"]["directions"][()]
+        print('directions', directions)
+        shape = h5_file["VolumeInfo"]["shape"][()]
+        print(shape)
+
+        delta = vres * directions / np.linalg.norm(directions, axis=0)
+        def _get_coord(p):
+            return np.round(np.linalg.inv(delta) @ (p - origin)).astype(float)
+        
+
+        coord_tric = _get_coord(tric)
+        coord_tric = abs(coord_tric)
+        coord_tric[0], coord_tric[1] = coord_tric[1], coord_tric[0]
+        coord_tric[1] = shape[1] - coord_tric[1]
+
+        coord_apex = _get_coord(apex)
+        coord_apex = abs(coord_apex)
+        coord_apex[0], coord_apex[1] = coord_apex[1], coord_apex[0]
+        coord_apex[1] = shape[1] - coord_apex[1]
+        volume_superimposed = input_data + ground_truth * 50
+
+
+        def rotate_vol_given_2_points(coord_tric, coord_apex, volume):
+            axis = extract_axis_from_points(coord_tric, coord_apex)
+            axis_xz = axis.copy()
+            axis_xz[1] = 0
+            axis_xz = axis_xz / cp.linalg.norm(axis_xz)
+
+            axis_yz = axis.copy()
+            axis_yz[0] = 0
+            axis_yz = axis_yz / cp.linalg.norm(axis_yz)
+
+            alpha_xz = signed_angle_between_vectors_gpu(axis_xz)
+            alpha_yz = signed_angle_between_vectors_gpu(axis_yz)
+            
+            volume_rotatedx = rotate(volume, alpha_xz, axes=(1,2), reshape=True, 
+                                            order=3, mode='constant', cval=0.0, prefilter=True)
+
+            volume_rotatedy = rotate(volume_rotatedx, -alpha_yz, axes=(0,2), reshape=True, 
+                                            order=3, mode='constant', cval=0.0, prefilter=True)
+            return volume_rotatedy
+        
+        coord_tric = cp.array(coord_tric)
+        coord_apex = cp.array(coord_apex)
+        volume_superimposed = cp.array(volume_superimposed)
+
+        volume_rotated = rotate_vol_given_2_points(coord_tric, coord_apex, volume_superimposed)
+        
+        viewer = VolumeViewer(volume_rotated)
+        viewer.show()
+
+        target_x = viewer.clicked_points[0][1]
+        target_y = viewer.clicked_points[0][0]
+
+        for grid in grids:
+            print(f"Processing grid {grid}")
+            input_data = h5_file['Input'][grid][:]
+
+            input_data = cp.array(input_data)
+
+            volume_rotated = rotate_vol_given_2_points(coord_tric, coord_apex, input_data)
+            volume_centered = center_volume(volume_rotated, target_x, target_y)
+            volume_centered = volume_centered.transpose(2, 0, 1)
+
+            # Step 4: Extract slices passing through the selected point, aligned with the z-axis
+            first_slice = slice_volume_z(volume_centered, degrees[0])
+            height, width = first_slice.shape  # Get dimensions of a single slice
+
+            # Initialize an empty CuPy array for the slices
+            imgs = cp.zeros((len(degrees), height, width), dtype=first_slice.dtype)
+
+            # Extract and store each slice
+            for i, angle in enumerate(degrees):
+                imgs[i] = slice_volume_z(volume_centered, angle)
+            
+            imgs = imgs.transpose(1,2,0)
+
+            save_path_img = os.path.join(save_path, f"{grid}.npz")
+            np.savez_compressed(save_path_img, imgs)
+        print(f"Saved images to {save_path}")

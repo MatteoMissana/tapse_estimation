@@ -77,7 +77,7 @@ idx_apex = cp.asarray(idx_apex)
 
 delta = vres * directions / np.linalg.norm(directions, axis=0)
 def _get_coord(p):
-        return np.linalg.inv(delta) @ (p - origin)
+        return np.round(np.linalg.inv(delta) @ (p - origin)).astype(float)
 #print('delta', delta)
 
 coord_tric = _get_coord(tricuspid_valve)
@@ -85,7 +85,6 @@ coord_tric = abs(coord_tric)
 coord_tric[0], coord_tric[1] = coord_tric[1], coord_tric[0]
 coord_tric[1] = shape[1] - coord_tric[1]
 
-#coord_tric = abs(coord_tric)
 print('coord_tric',coord_tric)
 
 coord_apex = _get_coord(apex)
@@ -93,9 +92,7 @@ coord_apex = abs(coord_apex)
 coord_apex[0], coord_apex[1] = coord_apex[1], coord_apex[0]
 coord_apex[1] = shape[1] - coord_apex[1]
 
-#coord_apex = abs(coord_apex)
-print(coord_apex)
-
+print('coord_apex',coord_apex)
 
 viewer = VolumeViewer(image_1*255)
 viewer.clicked_points.append(coord_tric)
@@ -104,7 +101,7 @@ viewer.show()
 
 
 coord_tric= cp.asarray(coord_tric)
-print(coord_tric)
+
 coord_apex= cp.asarray(coord_apex)
 
 degrees = np.linspace(np.pi, 2*np.pi, 100)

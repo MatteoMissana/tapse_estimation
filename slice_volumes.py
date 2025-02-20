@@ -3,14 +3,14 @@ from utils.plot import VolumeViewer
 import numpy as np
 import os
 import json
-from utils.extract_slices import extract_slices
+from utils.extract_slices import extract_from_hdf5
 
 folder = r"D:\mmissana\data\4DRVQ_Jinyang\voxels"
-save_folder = r"D:\mmissana\data\processed_imgs"
-checkpoint_file = r"D:\mmissana\data\checkpoint.json"
+save_folder = r"D:\mmissana\data\processed_imgs_2"
+checkpoint_file = r"D:\mmissana\data\checkpoint_2.json"
 
 def load_checkpoint():
-    """Load checkpoint file if exists."""
+    """Load checkpoint file if it exists."""
     if os.path.exists(checkpoint_file):
         with open(checkpoint_file, "r") as f:
             return json.load(f)
@@ -21,60 +21,40 @@ def save_checkpoint(checkpoint_data):
     with open(checkpoint_file, "w") as f:
         json.dump(checkpoint_data, f, indent=4)
 
-def print_structure(name, obj):
-    print(name, obj)
-
-degrees = np.linspace(np.pi, 2*np.pi, 20)
+degrees = np.linspace(np.pi, 2*np.pi, 18)
 checkpoint = load_checkpoint()  # Load progress
 
 for file in os.listdir(folder):
     file_path = os.path.join(folder, file)
+    print(f"Processing {file}...")
 
-    # Skip processed files
+    # Skip already processed files
     if file in checkpoint and checkpoint[file] == "complete":
         print(f"Skipping {file}, already processed.")
         continue
 
-    with h5py.File(file_path, 'r') as h5_file:
-        h5_file.visititems(print_structure)
-        grids = list(h5_file['Input'].keys())
+    # Manually enter tric and apex values
+    tric_values = input(f"Enter 3 values for tric (space-separated) for {file}: ")
+    apex_values = input(f"Enter 3 values for apex (space-separated) for {file}: ")
 
-        for grid in grids:
-            # Skip processed grids
-            if file in checkpoint and grid in checkpoint[file]:
-                print(f"Skipping {grid} in {file}, already processed.")
-                continue
+    try:
+        tric = np.array([float(x) for x in tric_values.split()])
+        apex = np.array([float(x) for x in apex_values.split()])
+        
+        if tric.shape != (3,) or apex.shape != (3,):
+            raise ValueError("Tric and Apex must each have exactly 3 values.")
 
-            while True:  # Repeat until user decides to save
-                input_data = h5_file['Input'][grid][:]
-                ground_truth = h5_file['GroundTruth'][grid][:]
-                imgs = extract_slices(input_data, ground_truth, degrees)
+    except ValueError as e:
+        print(f"Error in input values: {e}")
+        continue
+    
+    # Extract slices from the volume
+    save_subfolder = os.path.join(save_folder, file.replace(".h5", ""))
+    os.makedirs(save_subfolder, exist_ok=True)
+    extract_from_hdf5(file_path, save_subfolder, degrees, tric=tric, apex=apex)
 
-                viewer = VolumeViewer(imgs)
-                viewer.show()
+    # Save the checkpoint
+    checkpoint[file] = "complete"
+    save_checkpoint(checkpoint)
+    print(f"File {file} processed successfully!")
 
-                user_choice = ""
-                while user_choice not in ["y", "n"]:
-                    user_choice = input(f"Save images for {grid}? (y/n): ").strip().lower()
-
-                if user_choice == 'y':
-                    save_path = os.path.join(save_folder, file, f"{grid}.npz")
-                    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-                    np.savez_compressed(save_path, imgs)
-                    print(f"Saved images to {save_path}")
-
-                    # Update checkpoint
-                    if file not in checkpoint:
-                        checkpoint[file] = {}
-                    checkpoint[file][grid] = "done"
-                    save_checkpoint(checkpoint)  # Save progress
-
-                    break  # Move to next grid
-                else:
-                    print("Repeating visualization...")
-
-        # Mark file as fully processed
-        checkpoint[file] = "complete"
-        save_checkpoint(checkpoint)
-
-print("Processing completed for all files.")
