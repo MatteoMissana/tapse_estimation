@@ -41,8 +41,43 @@ def load_and_plot_annotations(file_path, annotation_path):
     plt.ioff()
     plt.show()
 
-if __name__ == "__main__":
-    file_path = r"D:\mmissana\data\best_slices\811001\video_best_slice.npz"
-    annotation_path = r"D:\mmissana\data\best_slices\811001\video_best_slice_annotations.npz"
+
+def visualize_dataset(dataset_path):
+    """
+    Visualize images and keypoints from a dataset.
     
-    load_and_plot_annotations(file_path, annotation_path)
+    Parameters:
+    -----------
+    dataset_path : str
+        Path to the `.npz` file containing the dataset.
+    """
+    # Load the dataset
+    dataset = np.load(dataset_path)
+    images = dataset['images']
+    keypoints = dataset['keypoints']
+    
+    num_images = images.shape[0]
+    print(images.shape)
+    
+    plt.ion()
+    plt.ion()  # Interactive mode
+
+    for idx in range(num_images):
+        plt.clf()
+        plt.imshow(images[idx, :, :], cmap='gray')  # Display the image
+        
+        # Plot annotations
+        for j in range(2):
+            plt.scatter(keypoints[idx][j][0], keypoints[idx][j][1], 
+                        color='r', marker='*', s=100)  # Annotations
+        
+        plt.title(f"image {idx + 1}/{num_images}")
+        plt.pause(0.5)  # Pause to visualize the frame
+    
+    plt.ioff()
+    plt.show()
+
+if __name__ == "__main__":
+    dataset_path = 'data/dataset/dataset.npz'
+    visualize_dataset(dataset_path)
+
