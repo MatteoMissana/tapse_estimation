@@ -3,6 +3,8 @@ from utils.results_visualization import create_video
 import cupy as cp
 import os
 
+'''allows to create a video given some frames'''
+
 folder_path = r"D:\mmissana\data\best_slices"
 save_path = r"D:\mmissana\data\best_slices_videos"
 

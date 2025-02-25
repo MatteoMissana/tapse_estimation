@@ -5,6 +5,8 @@ import os
 import json
 from utils.extract_slices import extract_from_hdf5
 
+'''code that i used to extract the 2d slices from the 3d volume'''
+
 folder = r"D:\mmissana\data\4DRVQ_Jinyang\voxels"
 save_folder = r"D:\mmissana\data\processed_imgs_2"
 checkpoint_file = r"D:\mmissana\data\checkpoint_2.json"

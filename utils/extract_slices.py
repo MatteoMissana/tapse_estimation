@@ -7,6 +7,11 @@ import math as m
 import h5py
 import os
 
+
+'''these are all functions used to extract the slices from the 3d images.
+the last one that i used is extract_from_hdf5. It requires the coordinates of 2 points, rotates the volume to align z axis to that 
+axis, then asks to select the centre of the tricuspid valve after the rotation and slices the volume with planes parallel to that axis'''
+
 def signed_angle_between_vectors(vec, target=np.array([0, 0, 1]), ref_axis=None):
     """
     Compute the signed angle (in degrees) between `vec` and `target`.

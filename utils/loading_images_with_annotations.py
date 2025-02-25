@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
+'''image visualization with annotations superimposed'''
+
 def load_and_plot_annotations(file_path, annotation_path):
     """
     Load and display an image with annotations.
