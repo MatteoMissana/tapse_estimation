@@ -78,6 +78,6 @@ def visualize_dataset(dataset_path):
     plt.show()
 
 if __name__ == "__main__":
-    dataset_path = 'data/dataset/dataset.npz'
+    dataset_path = 'data/dataset/test.npz'
     visualize_dataset(dataset_path)
 

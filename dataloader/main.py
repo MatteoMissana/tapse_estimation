@@ -59,7 +59,7 @@ class KeypointDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = 'D:/mmissana/data/dataset/dataset.npz'
+    dataset = 'D:/mmissana/data/dataset/train.npz'
     keypoint_dataset = KeypointDataset(dataset, filter=True)
     print(f"Number of images: {len(keypoint_dataset)}")
     print(f"Image shape: {keypoint_dataset[0][0].shape}")
