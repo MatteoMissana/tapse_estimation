@@ -58,6 +58,7 @@ def visualize_dataset(dataset_path):
     
     num_images = images.shape[0]
     print(images.shape)
+    print(images.max(), images.min())
     
     plt.ion()
     plt.ion()  # Interactive mode
@@ -78,6 +79,6 @@ def visualize_dataset(dataset_path):
     plt.show()
 
 if __name__ == "__main__":
-    dataset_path = 'data/dataset/test.npz'
+    dataset_path = 'data/dataset_256/test.npz'
     visualize_dataset(dataset_path)
 

@@ -49,7 +49,7 @@ class KeypointDataset(Dataset):
         keypoint[1, 0] /= img.shape[2]  # x2 / width
         keypoint[1, 1] /= img.shape[1]  # y2 / height
 
-        keypoint = torch.tensor(keypoint.flatten(), dtype=torch.float32)
+        keypoint = torch.tensor(keypoint, dtype=torch.float32)
 
         # Apply any transformations
         if self.transform:

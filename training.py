@@ -4,10 +4,11 @@ from torch.utils.data import DataLoader
 from dataloader.main import KeypointDataset
 import torch.optim as optim
 from models.improved_unet import ImprovedUNet
+from losses.mse_considering_switched_points import UnorderedMSELoss
 
 # Supponiamo che il tuo dataset sia definito come MyDataset
-train_dataset = KeypointDataset(split="train")  # Assumendo che il dataset abbia un parametro "split"
-val_dataset = KeypointDataset(split="val")
+train_dataset = KeypointDataset(r'data/dataset/train.npz', filter=True)  # Assumendo che il dataset abbia un parametro "split"
+val_dataset = KeypointDataset(r'data/dataset/val.npz', filter=True)
 
 # Creiamo DataLoader per batch processing
 train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
@@ -22,7 +23,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ImprovedUNet(in_channels=1, num_classes=num_classes).to(device)
 
 # Definizione della loss function (usa BCEWithLogitsLoss per segmentazione binaria)
-criterion = nn.CrossEntropyLoss()
+criterion = UnorderedMSELoss()
 
 # Ottimizzatore (puoi provare Adam o SGD)
 optimizer = optim.Adam(model.parameters(), lr=1e-3, weight_decay=1e-5)
@@ -32,15 +33,25 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     model.train()
 
     for epoch in range(num_epochs):
+        print(f"Epoch {epoch + 1}/{num_epochs}")
         running_loss = 0.0
 
         for images, masks in train_loader:
             images, masks = images.to(device), masks.to(device)
 
             optimizer.zero_grad()  # Reset del gradiente
+
+            images.requires_grad_(True)  # Ensure gradients flow
+
             outputs = model(images)  # Forward pass
+            print(images.requires_grad)
+            print(outputs.requires_grad)
+
+            print("Pred requires_grad:", outputs.requires_grad)
+            print("Target requires_grad:", masks.requires_grad)
 
             loss = criterion(outputs, masks)  # Calcolo della loss
+            print(loss, loss.requires_grad)
             loss.backward()  # Backpropagation
             optimizer.step()  # Aggiornamento pesi
 
