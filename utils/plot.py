@@ -1,6 +1,8 @@
 import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
+import numpy as np
+import os
 
 class VolumeViewer:
     def __init__(self, volume, click_radius=5):
@@ -184,15 +186,63 @@ class VolumeViewer:
                 continue
             self.unit_vectors.append(vector)
 
-def visualize_image(image):
+def visualize_image(image, points=None):
     """
-    Visualizza un'immagine 2D.
-    Se l'immagine è un array CuPy, viene convertita in un array NumPy.
+    Displays a 2D image with optional points highlighted.
+    If the image is a CuPy array, it is converted to a NumPy array.
+    
+    :param image: 2D array representing the image
+    :param points: list of tuples (x, y) for the points to highlight in red
     """
     if isinstance(image, cp.ndarray):
         image = cp.asnumpy(image)
+    
     plt.imshow(image, cmap='gray')
     plt.colorbar()
     plt.title("2D Image Visualization")
     plt.axis('off')
+    
+    # If points are provided, plot them in red
+    if points:
+        points = np.array(points)
+        plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
+    
     plt.show()
+
+def save_image(image, points=None, save_folder="visualizations"):
+    """
+    Saves a 2D image with optional points highlighted to a specified folder.
+    If the image is a CuPy array, it is converted to a NumPy array.
+    
+    :param image: 2D array representing the image
+    :param points: list of tuples (x, y) for the points to highlight in red
+    :param save_folder: folder where the image will be saved, default is 'visualizations'
+    """
+    if isinstance(image, cp.ndarray):
+        image = cp.asnumpy(image)
+    
+    # Make sure the folder exists
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    
+    # Generate an incremental file name
+    existing_files = os.listdir(save_folder)
+    num_images = len([f for f in existing_files if f.endswith('.png')])  # Count current PNG files
+    save_path = os.path.join(save_folder, f"image_{num_images + 1}.png")
+    
+    # Create the plot
+    plt.imshow(image, cmap='gray')
+    plt.colorbar()
+    plt.title("2D Image Visualization")
+    plt.axis('off')
+    
+    # If points are provided, plot them in red
+    if points:
+        points = np.array(points)
+        plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
+    
+    # Save the image
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    plt.close()  # Close the plot to avoid displaying it in an interactive session
+    
+    print(f"Image saved to {save_path}")

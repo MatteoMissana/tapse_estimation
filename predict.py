@@ -4,7 +4,9 @@ import torch.nn.functional as F
 from torchvision import models
 from models.tasken_unet import UNet
 import numpy as np
-from utils.plot import visualize_image
+from utils.plot import visualize_image, save_image
+from postprocessing.coordinates_calculation_from_masks import center_of_mass
+import argparse  # Added argparse for command-line argument parsing
 
 def preprocess_images(images_array, model_type="EchoCoder"):
     """
@@ -13,8 +15,8 @@ def preprocess_images(images_array, model_type="EchoCoder"):
     """
 
     # Assicuriamoci che il tipo di dato sia float32 e normalizziamo se necessario
-    # if images_array.max() > 1:
-    #     images_array = images_array.astype(np.float32)/256.0
+    if images_array.max() > 1:
+        images_array = images_array.astype(np.float32)/255.0
 
     # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
     images_tensor = torch.tensor(images_array).unsqueeze(1).unsqueeze(1)  # Shape diventa (N, 1, 256, 256)
@@ -32,6 +34,16 @@ def preprocess_images(images_array, model_type="EchoCoder"):
     print(images_tensor.shape)
     return images_tensor
 
+# Initialize the argument parser
+parser = argparse.ArgumentParser(description="Run image processing with optional visualization")
+parser.add_argument('--visualize', action='store_true', help="Set this flag to visualize the image")
+parser.add_argument('--save_folder', type=str, default=None, help="Folder where to save the images, if you want to save them")
+args = parser.parse_args()  # Parse the arguments
+
+# Set the visualize flag based on the command-line argument
+visualize = args.visualize
+save_folder = args.save_folder
+
 model = UNet(num_classes=2, depth=6, start_filts=8)
 model_path = r'dl_mapse/Data/best_loss_weights_unet_light.pth'
 
@@ -43,9 +55,22 @@ test_path = r'data/dataset_256/test.npz'
 data = np.load(test_path)
 images = data['images']
 
+flip = True
+if flip:
+    images = images[:,:, ::-1]
+
+
 input_tensor = preprocess_images(images, model_type="U-Net")
 for im in input_tensor:
-    visualize_image(im[0,1].numpy())
     im = im.unsqueeze(0)
     output = model(im)
-    visualize_image(np.maximum(output[0,1].detach().numpy(), -200))
+    coordinates_1 = center_of_mass(output[0, 0].detach())
+    coordinates_2 = center_of_mass(output[0, 1].detach()) 
+    
+    # Only visualize if --visualize flag was set
+    if visualize:
+        visualize_image(im[0, 0, 0].numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())])
+    # saving if --save_folder is specified
+    if save_folder:
+        save_image(im[0, 0, 0].numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=save_folder)
+

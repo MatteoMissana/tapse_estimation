@@ -2,9 +2,10 @@ import torch
 from torch.utils.data import Dataset
 import numpy as np
 import os
+from dataloader.preprocessing import preprocess_images
 
 class KeypointDataset(Dataset):
-    def __init__(self, numpy_dataset, transform=None, filter=False):
+    def __init__(self, numpy_dataset, transform=None, filter=False, preprocessing= False, device='cpu', model_type = 'U-Net'):
         """
         Args:
             images (list of np.array): List of grayscale images as numpy arrays.
@@ -26,30 +27,28 @@ class KeypointDataset(Dataset):
         self.images = images
         self.keypoints = keypoints
         self.transform = transform
+        self.preprocessing = preprocessing
+        self.device = device
+        self.model_type = model_type
 
     def __len__(self):
         return len(self.images)
 
     def __getitem__(self, idx):
         img = self.images[idx]
+        img = np.expand_dims(img, axis = 0)
 
-        # Ensure image is in grayscale format (H, W) → (1, H, W)
-        if img.ndim == 2:  # Grayscale image (H, W)
-            img = np.expand_dims(img, axis=0)  # Convert to (1, H, W)
-
-        # Normalize image to [0,1]
-        img = img.astype(np.float32) / 255.0
-        img = torch.tensor(img)  # Already in (1, H, W)
+        img = preprocess_images(img, model_type = self.model_type, device=self.device)
 
         # Normalize keypoints based on image dimensions
         # keypoints = list(self.keypoints[idx])
         keypoint = self.keypoints[idx]
-        keypoint[0, 0] /= img.shape[2]  # x1 / width
-        keypoint[0, 1] /= img.shape[1]  # y1 / height
-        keypoint[1, 0] /= img.shape[2]  # x2 / width
-        keypoint[1, 1] /= img.shape[1]  # y2 / height
+        # keypoint[0, 0] /= img.shape[3]  # x1 / width
+        # keypoint[0, 1] /= img.shape[2]  # y1 / height
+        # keypoint[1, 0] /= img.shape[3]  # x2 / width
+        # keypoint[1, 1] /= img.shape[2]  # y2 / height
 
-        keypoint = torch.tensor(keypoint, dtype=torch.float32)
+        keypoint = torch.tensor(keypoint, dtype=torch.float32).to(self.device)
 
         # Apply any transformations
         if self.transform:
