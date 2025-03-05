@@ -1,15 +1,14 @@
-import torch.nn as nn
 import torch
 from torch.utils.data import DataLoader
 from dataloader.main import KeypointDataset
 import torch.optim as optim
-from models.improved_unet import ImprovedUNet
 from losses.mse_considering_switched_points import UnorderedMSELoss
 from models.tasken_unet import UNet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
 import numpy as np
 from utils.plot import save_image
+from callbacks.early_stopping import EarlyStopping
 
 # Supponiamo che il tuo dataset sia definito come MyDataset
 train_dataset = KeypointDataset(r'data/dataset_256/train.npz', filter=True)  # Assumendo che il dataset abbia un parametro "split"
@@ -42,6 +41,9 @@ optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=10):
     model.train()
 
+    # Initialize early stopping (for validation loss minimization)
+    early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=5, path='checkpoints/best_model.pth')
+
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
         running_loss = 0.0
@@ -71,9 +73,14 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
         print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}")
 
-        # Validazione ogni 5 epoche (opzionale)
-        if (epoch + 1) % 5 == 0:
-            validate(model, val_loader, criterion)
+        val_loss = validate(model, val_loader, criterion)
+
+        # Call early stopping
+        early_stopping(val_loss, model)
+
+        if early_stopping.early_stop:
+            print("Early stopping triggered")
+            break
 
     print("Training completo!")
 
@@ -96,6 +103,7 @@ def validate(model, val_loader, criterion):
 
     avg_val_loss = val_loss / len(val_loader)
     print(f"Validation Loss: {avg_val_loss:.4f}")
+    return avg_val_loss
 
 
 # Allenamento del modello
@@ -114,7 +122,7 @@ images = data['images']
 save_folder = r'D:\mmissana\data\results\zero_shot_unet_light_test_set_cazzoculo'
 
 for im in images:
-    im = np.expand_dims(im, axis = 0)
+    im = np.expand_dims(im, axis=0)
     im = preprocess_images(im, model_type='U-Net', device=device)
     im = im.unsqueeze(0)
     output = model(im)
