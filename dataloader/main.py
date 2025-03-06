@@ -3,6 +3,9 @@ from torch.utils.data import Dataset
 import numpy as np
 import os
 from dataloader.preprocessing import preprocess_images
+from torchvision import transforms as T
+from torchvision.transforms import v2 as T
+from augmentations.aug0 import apply_transform
 
 class KeypointDataset(Dataset):
     def __init__(self, numpy_dataset, transform=None, filter=False, preprocessing= False, device='cpu', model_type = 'U-Net'):
@@ -40,19 +43,13 @@ class KeypointDataset(Dataset):
 
         img = preprocess_images(img, model_type = self.model_type, device=self.device)
 
-        # Normalize keypoints based on image dimensions
-        # keypoints = list(self.keypoints[idx])
         keypoint = self.keypoints[idx]
-        # keypoint[0, 0] /= img.shape[3]  # x1 / width
-        # keypoint[0, 1] /= img.shape[2]  # y1 / height
-        # keypoint[1, 0] /= img.shape[3]  # x2 / width
-        # keypoint[1, 1] /= img.shape[2]  # y2 / height
 
         keypoint = torch.tensor(keypoint, dtype=torch.float32).to(self.device)
 
         # Apply any transformations
         if self.transform:
-            img, keypoint = self.transform(img, keypoint)
+            img, keypoint = apply_transform(img, keypoint, version=self.transform)
 
         return img, keypoint
 
@@ -64,5 +61,5 @@ if __name__ == "__main__":
     print(f"Image shape: {keypoint_dataset[0][0].shape}")
     print(f"Keypoint shape: {keypoint_dataset[0][1].shape}")
     print(f"Keypoint coordinates: {keypoint_dataset[0][1]}")
-    
+
     

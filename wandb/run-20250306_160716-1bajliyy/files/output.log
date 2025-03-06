@@ -1,0 +1,20 @@
+d:\mmissana\tapse_estimation\models\tasken_unet.py:111: UserWarning: nn.init.xavier_normal is now deprecated in favor of nn.init.xavier_normal_.
+  init.xavier_normal(m.weight)
+d:\mmissana\tapse_estimation\models\tasken_unet.py:112: UserWarning: nn.init.constant is now deprecated in favor of nn.init.constant_.
+  init.constant(m.bias, 0)
+Traceback (most recent call last):
+  File "d:\mmissana\tapse_estimation\training.py", line 171, in <module>
+    main()
+  File "d:\mmissana\tapse_estimation\training.py", line 139, in main
+    model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\serialization.py", line 986, in load
+    with _open_file_like(f, 'rb') as opened_file:
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\serialization.py", line 435, in _open_file_like
+    return _open_file(name_or_buffer, mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\serialization.py", line 416, in __init__
+    super().__init__(open(name, mode))
+                     ^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'dl_mapse/Data/best_loss_weights_unet_light.pth'

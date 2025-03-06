@@ -15,6 +15,7 @@ from dataloader.preprocessing import preprocess_images
 from utils.plot import save_image
 from callbacks.early_stopping import EarlyStopping
 
+
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Train U-Net model for keypoint detection.')
@@ -22,8 +23,8 @@ def parse_args():
     parser.add_argument('--patience', type=int, default=7, help='Early stopping patience')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
     parser.add_argument('--save_path', type=str, default='results', help='Path to save test images')
-    parser.add_argument('--train_data', type=str, default='data/dataset_256/train.npz', help='Path to the training dataset')
-    parser.add_argument('--val_data', type=str, default='data/dataset_256/val.npz', help='Path to the validation dataset')
+    parser.add_argument('--train_data', type=str, default='D:/mmissana/data/dataset_256/train.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default='D:/mmissana/data/dataset_256/val.npz', help='Path to the validation dataset')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
@@ -128,7 +129,7 @@ def main():
     )
 
     # Load dataset
-    train_dataset = KeypointDataset(args.train_data, filter=True)
+    train_dataset = KeypointDataset(args.train_data, filter=True, transform='0')
     val_dataset = KeypointDataset(args.val_data, filter=True)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=g)
@@ -147,7 +148,7 @@ def main():
 
     # Run inference on test set
     model.eval()
-    test_path = 'data/dataset_256/test.npz'
+    test_path = 'D:/mmissana/data/dataset_256/test.npz'
     data = np.load(test_path)
     images = data['images']
 

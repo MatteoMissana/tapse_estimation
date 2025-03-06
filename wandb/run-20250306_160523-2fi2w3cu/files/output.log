@@ -1,0 +1,13 @@
+Traceback (most recent call last):
+  File "d:\mmissana\tapse_estimation\training.py", line 171, in <module>
+    main()
+  File "d:\mmissana\tapse_estimation\training.py", line 131, in main
+    train_dataset = KeypointDataset(args.train_data, filter=True)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "d:\mmissana\tapse_estimation\dataloader\main.py", line 20, in __init__
+    file = np.load(numpy_dataset)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\numpy\lib\npyio.py", line 427, in load
+    fid = stack.enter_context(open(os_fspath(file), "rb"))
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'data/dataset_256/train.npz'
