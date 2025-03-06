@@ -1,89 +1,96 @@
+import argparse
 import torch
 from torch.utils.data import DataLoader
-from dataloader.main import KeypointDataset
 import torch.optim as optim
+import numpy as np
+import random
+import os
+import wandb  # Import wandb
+
+from dataloader.main import KeypointDataset
 from losses.mse_considering_switched_points import UnorderedMSELoss
 from models.tasken_unet import UNet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
-import numpy as np
 from utils.plot import save_image
 from callbacks.early_stopping import EarlyStopping
 
-# Supponiamo che il tuo dataset sia definito come MyDataset
-train_dataset = KeypointDataset(r'data/dataset_256/train.npz', filter=True)  # Assumendo che il dataset abbia un parametro "split"
-val_dataset = KeypointDataset(r'data/dataset_256/val.npz', filter=True)
+# Argument parser
+def parse_args():
+    parser = argparse.ArgumentParser(description='Train U-Net model for keypoint detection.')
+    parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
+    parser.add_argument('--patience', type=int, default=7, help='Early stopping patience')
+    parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
+    parser.add_argument('--save_path', type=str, default='results', help='Path to save test images')
+    parser.add_argument('--train_data', type=str, default='data/dataset_256/train.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default='data/dataset_256/val.npz', help='Path to the validation dataset')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
+    parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
+    parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
+    parser.add_argument('--wandb_project', type=str, default='unet-training', help='tapse')
+    parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
+    return parser.parse_args()
 
-# Creiamo DataLoader per batch processing
-train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
-val_loader = DataLoader(val_dataset, batch_size=16, shuffle=False)
+# Set random seed for reproducibility
+seed = 42
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
 
-
-# Numero di classi del tuo problema
-num_classes = 2  # Cambia in base al tuo dataset
-
-# Definizione del modello
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = UNet(num_classes=2, depth=6, start_filts=8).to(device)
+print('Using device:', device)
 
-model_path = r'dl_mapse/Data/best_loss_weights_unet_light.pth'
+if torch.cuda.is_available():
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
 
-# Load weights
-model.load_state_dict(torch.load(model_path, map_location='cpu')['model_state_dict'])
+g = torch.Generator()
+g.manual_seed(seed)
 
-# Definizione della loss function (usa BCEWithLogitsLoss per segmentazione binaria)
-criterion = UnorderedMSELoss()
-
-# Ottimizzatore (puoi provare Adam o SGD)
-optimizer = optim.Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
-
-
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=10):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path):
     model.train()
-
-    # Initialize early stopping (for validation loss minimization)
-    early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=5, path='checkpoints/best_model.pth')
+    early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
         running_loss = 0.0
-        
+
         for images, masks in train_loader:
             images, masks = images.to(device), masks.to(device)
-
-            optimizer.zero_grad()  # Reset del gradiente
-
-            images.requires_grad_(True)  # Ensure gradients flow
+            optimizer.zero_grad()
 
             outputs = model(images)  # Forward pass
 
-            # Applica center_of_mass e organizza i risultati in una lista di liste
+            # Compute center of mass for output masks
             com_tensor = torch.stack([
-                torch.stack([center_of_mass(mask, device=device, normalize=False) for mask in output])  # (num_masks, 2)
+                torch.stack([center_of_mass(mask, device=device, normalize=False) for mask in output])
                 for output in outputs
-            ]).to(device)  # (batch_size, num_masks, 2)
+            ]).to(device)
 
-            loss = criterion(com_tensor, masks)  # Calcolo della loss
-            loss.backward()  # Backpropagation
-            optimizer.step()  # Aggiornamento pesi
+            loss = criterion(com_tensor, masks)
+            loss.backward()
+            optimizer.step()
 
             running_loss += loss.item()
 
         avg_loss = running_loss / len(train_loader)
-
-        print(f"Epoch [{epoch + 1}/{num_epochs}], Loss: {avg_loss:.4f}")
-
         val_loss = validate(model, val_loader, criterion)
 
-        # Call early stopping
+        # Log losses to wandb
+        wandb.log({"train_loss": avg_loss, "val_loss": val_loss})
+
+        print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}")
+
         early_stopping(val_loss, model)
 
         if early_stopping.early_stop:
             print("Early stopping triggered")
+            model.load_state_dict(torch.load(os.path.join(checkpoint_path, 'best_model.pth'), map_location=device)['model_state_dict'])
             break
 
-    print("Training completo!")
-
+    print("Training complete!")
 
 def validate(model, val_loader, criterion):
     model.eval()
@@ -94,41 +101,71 @@ def validate(model, val_loader, criterion):
             outputs = model(images)
 
             com_tensor = torch.stack([
-                torch.stack([center_of_mass(mask, device=device, normalize=False) for mask in output])  # (num_masks, 2)
+                torch.stack([center_of_mass(mask, device=device, normalize=False) for mask in output])
                 for output in outputs
-            ]).to(device)  # (batch_size, num_masks, 2)
+            ]).to(device)
 
             loss = criterion(com_tensor, masks)
             val_loss += loss.item()
 
     avg_val_loss = val_loss / len(val_loader)
-    print(f"Validation Loss: {avg_val_loss:.4f}")
     return avg_val_loss
 
+def main():
+    args = parse_args()
 
-# Allenamento del modello
-train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs=25)
+    # Initialize Weights & Biases
+    wandb.init(
+        project=args.wandb_project,
+        entity=args.wandb_entity,
+        config={
+            "epochs": args.epochs,
+            "batch_size": args.batch_size,
+            "learning_rate": args.initial_lr,
+            "patience": args.patience,
+            "model": "U-Net"
+        }
+    )
 
-model.eval()
+    # Load dataset
+    train_dataset = KeypointDataset(args.train_data, filter=True)
+    val_dataset = KeypointDataset(args.val_data, filter=True)
 
-test_path = r'data/dataset_256/test.npz'
-data = np.load(test_path)
-images = data['images']
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=g)
+    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 
-# flip = True
-# if flip:
-#     images = images[:,:, ::-1]
+    # Define model
+    model = UNet(num_classes=2, depth=6, start_filts=8).to(device)
+    model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
 
-save_folder = r'D:\mmissana\data\results\zero_shot_unet_light_test_set_cazzoculo'
+    # Define loss function and optimizer
+    criterion = UnorderedMSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
 
-for im in images:
-    im = np.expand_dims(im, axis=0)
-    im = preprocess_images(im, model_type='U-Net', device=device)
-    im = im.unsqueeze(0)
-    output = model(im)
-    coordinates_1 = center_of_mass(output[0, 0].detach())
-    coordinates_2 = center_of_mass(output[0, 1].detach()) 
-    
-    # saving if --save_folder is specified
-    if save_folder:
-        save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=save_folder)
+    # Train the model
+    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path)
+
+    # Run inference on test set
+    model.eval()
+    test_path = 'data/dataset_256/test.npz'
+    data = np.load(test_path)
+    images = data['images']
+
+    os.makedirs(args.save_path, exist_ok=True)
+
+    for im in images:
+        im = np.expand_dims(im, axis=0)
+        im = preprocess_images(im, model_type='U-Net', device=device)
+        im = im.unsqueeze(0)
+        output = model(im)
+        coordinates_1 = center_of_mass(output[0, 0].detach())
+        coordinates_2 = center_of_mass(output[0, 1].detach())
+
+        # Save results
+        save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=args.save_path)
+
+    # Finish wandb run
+    wandb.finish()
+
+if __name__ == "__main__":
+    main()

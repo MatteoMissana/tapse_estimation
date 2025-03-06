@@ -14,7 +14,7 @@ class EarlyStopping:
         path (str): Path to save the best model checkpoint.
     """
 
-    def __init__(self, monitor='val_loss', mode='min', patience=5, delta=0, path='checkpoint.pth'):
+    def __init__(self, monitor='val_loss', mode='min', patience=5, delta=0, path='/checkpoints'):
         self.monitor = monitor
         self.mode = mode
         self.patience = patience
@@ -35,7 +35,7 @@ class EarlyStopping:
             raise ValueError("mode must be 'min' or 'max'")
 
         if not os.path.exists(self.path):
-            os.mkdir(self.path)
+            os.makedirs(self.path)
 
     def __call__(self, metric_value, model):
         """
@@ -49,7 +49,7 @@ class EarlyStopping:
         if self.compare(metric_value, self.best_score):
             self.best_score = metric_value
             self.counter = 0
-            torch.save(model.state_dict(), self.path)  # Save best model
+            torch.save({'model_state_dict': model.state_dict()}, os.path.join(self.path, 'best_model.pth'))  # Save best model
         else:
             self.counter += 1
             if self.counter >= self.patience:
