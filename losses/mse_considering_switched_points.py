@@ -33,6 +33,43 @@ class UnorderedMSELoss(nn.Module):
             return min_loss  # Preserves gradients
 
 
+def pairwise_distance(a, b):
+    """
+    Computes the Euclidean distance between corresponding points in two tensors.
+    Assumes input shapes are (batch_size, num_points, dim).
+    """
+    return torch.norm(a - b, dim=2)
+
+
+class UnorderedDistanceLoss(nn.Module):
+    def __init__(self, reduction='mean'):
+        """
+        Custom loss function to handle unordered pairs of points.
+        It computes the Euclidean distance considering both possible matchings
+        and takes the minimum loss for each sample in the batch.
+
+        :param reduction: Specifies the reduction to apply to the output.
+                          'mean' (default) computes the average loss.
+                          'sum' computes the sum of all losses.
+                          'none' returns loss per sample.
+        """
+        super(UnorderedDistanceLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, pred, target):
+        dist1 = pairwise_distance(pred, target).mean(dim=1)  # Standard pairing
+        dist2 = pairwise_distance(pred, target.flip(dims=[1])).mean(dim=1)  # Flipped pairing
+
+        min_loss = torch.minimum(dist1, dist2)  # Selects the lower distance for each sample
+
+        if self.reduction == 'mean':
+            return min_loss.mean()
+        elif self.reduction == 'sum':
+            return min_loss.sum()
+        else:
+            return min_loss  # Preserves gradients
+
+
 # Example usage
 if __name__ == "__main__":
     batch_size = 4
