@@ -1,0 +1,53 @@
+{
+    "os": "Windows-10-10.0.19045-SP0",
+    "python": "3.11.5",
+    "heartbeatAt": "2025-03-07T10:06:02.754511",
+    "startedAt": "2025-03-07T10:06:01.980829",
+    "docker": null,
+    "cuda": null,
+    "args": [],
+    "state": "running",
+    "program": "d:\\mmissana\\tapse_estimation\\training.py",
+    "codePathLocal": "training.py",
+    "codePath": "training.py",
+    "git": {
+        "remote": "https://github.com/MatteoMissana/tapse_estimation",
+        "commit": "17166c5f3793a0d3e1a976d34b7c9007af111a35"
+    },
+    "email": "missanamatteo@gmail.com",
+    "root": "D:/mmissana/tapse_estimation",
+    "host": "vcxr10",
+    "username": "vcxr10",
+    "executable": "C:\\Users\\vcxr10\\anaconda3\\python.exe",
+    "cpu_count": 6,
+    "cpu_count_logical": 12,
+    "cpu_freq": {
+        "current": 3696.0,
+        "min": 0.0,
+        "max": 3696.0
+    },
+    "cpu_freq_per_core": [
+        {
+            "current": 3696.0,
+            "min": 0.0,
+            "max": 3696.0
+        }
+    ],
+    "disk": {
+        "/": {
+            "total": 1863.0126914978027,
+            "used": 561.2766571044922
+        }
+    },
+    "gpu": "NVIDIA GeForce GTX 1080",
+    "gpu_count": 1,
+    "gpu_devices": [
+        {
+            "name": "NVIDIA GeForce GTX 1080",
+            "memory_total": 8589934592
+        }
+    ],
+    "memory": {
+        "total": 31.955890655517578
+    }
+}

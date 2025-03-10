@@ -6,7 +6,7 @@ from dataloader.preprocessing import preprocess_images
 from torchvision import transforms as T
 from torchvision.transforms import v2 as T
 from augmentations.aug0 import apply_transform
-
+from utils.plot import visualize_image
 class KeypointDataset(Dataset):
     def __init__(self, numpy_dataset, transform=None, filter=False, preprocessing= False, device='cpu', model_type = 'U-Net'):
         """
@@ -50,6 +50,8 @@ class KeypointDataset(Dataset):
         # Apply any transformations
         if self.transform:
             img, keypoint = apply_transform(img, keypoint, version=self.transform)
+        
+        # visualize_image(img[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist())])
 
         return img, keypoint
 
