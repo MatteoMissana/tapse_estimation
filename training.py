@@ -11,9 +11,12 @@ from tqdm import tqdm  # Import tqdm for progress bar
 from dataloader.main import KeypointDataset
 from losses.distances import UnorderedMSELoss, UnorderedDistanceLoss
 from models.tasken_unet import UNet
+from models.weights_initialization import initialize_weights
+from models.echocoder_2dplust import EncoderDecoder_3d
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
 from utils.plot import save_image
+from utils.save import get_experiment_path
 from callbacks.early_stopping import EarlyStopping
 from callbacks.lr_schedule import ReduceLROnPlateau
 
@@ -21,11 +24,11 @@ from callbacks.lr_schedule import ReduceLROnPlateau
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Train U-Net model for keypoint detection.')
-    parser.add_argument('--epochs', type=int, default=50, help='Number of training epochs')
+    parser.add_argument('--epochs', type=int, default= 300, help='Number of training epochs')
     parser.add_argument('--patience', type=int, default=7, help='Early stopping patience')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
     parser.add_argument('--model', type=str, default='U-Net', help='name of the model: supported "U-Net"')
-    parser.add_argument('--save_path', type=str, default=None, help='Path to save test images')
+    parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
     parser.add_argument('--train_data', type=str, default='D:/mmissana/data/dataset_256/train.npz', help='Path to the training dataset')
     parser.add_argument('--val_data', type=str, default='D:/mmissana/data/dataset_256/val.npz', help='Path to the validation dataset')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
@@ -35,30 +38,34 @@ def parse_args():
     parser.add_argument('--augm_version', type=str, default='0', help='augmentation version you want to use')
     parser.add_argument('--loss', type=str, default='MSE', help='select the type of loss: "MSE" or "distance"')
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
+    parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
+
     return parser.parse_args()
 
+args = parse_args()
 # Set random seed for reproducibility
-seed = 42
-torch.manual_seed(seed)
-np.random.seed(seed)
-random.seed(seed)
+torch.manual_seed(args.seed)
+np.random.seed(args.seed)
+random.seed(args.seed)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print('Using device:', device)
 
 if torch.cuda.is_available():
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
 g = torch.Generator()
-g.manual_seed(seed)
+g.manual_seed(args.seed)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None):
     model.train()
     early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path)
-    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=5, factor=0.5, min_lr=0)
+    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=5, factor=0.5, min_lr=0, initial_lr=args.initial_lr)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
@@ -99,10 +106,21 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
         if early_stopping.early_stop:
             print("Early stopping triggered")
+
+            # Save last model
+            model_path = os.path.join(save_model_path, "last_model.pth")
+            torch.save({'model_state_dict': model.state_dict()}, model_path)
+
+            # load best model
             model.load_state_dict(torch.load(os.path.join(checkpoint_path, 'best_model.pth'), map_location=device)['model_state_dict'])
+            # save best model
+            model_path = os.path.join(save_model_path, "best_model.pth")
+            torch.save({'model_state_dict': model.state_dict()}, model_path)
+
             break
 
     print("Training complete!")
+    print(f"results saved in {save_model_path}")
 
 def validate(model, val_loader, criterion):
     model.eval()
@@ -188,7 +206,8 @@ def main():
             "patience": args.patience,
             "model": "U-Net",
             "augmentation_version": args.augm_version,
-            "loss_type": args.loss
+            "loss_type": args.loss,
+            "seed": args.seed
         }
     )
 
@@ -203,7 +222,17 @@ def main():
     # Define model
     if args.model == "U-Net":
         model = UNet(num_classes=2, depth=6, start_filts=8).to(device)
-        model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "echocoder_2d+t":
+        model = EncoderDecoder_3d().to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+
 
     # Define loss function and optimizer
     if args.loss == 'MSE':
@@ -215,7 +244,12 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
 
     # Train the model
-    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path)
+    save_model_path = args.save_model_path if args.save_model_path else get_experiment_path()
+    
+    if not os.path.exists(save_model_path):
+        os.makedirs(save_model_path)
+
+    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path, save_model_path)
 
     # Run inference on test set
     model.eval()
@@ -232,11 +266,11 @@ def main():
     wandb.summary["test_distance"] = test_distance
     wandb.summary["test_MSE"] = test_MSE
 
-    if args.save_path:
+    if args.save_images:
         data = np.load(test_path)
         images = data['images']
 
-        os.makedirs(args.save_path, exist_ok=True)
+        os.makedirs(save_model_path, exist_ok=True)
 
         for im in images:
             im = np.expand_dims(im, axis=0)
@@ -247,7 +281,7 @@ def main():
             coordinates_2 = center_of_mass(output[0, 1].detach())
 
             # Save results
-            save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=args.save_path)
+            save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=save_model_path)
 
     #Finish wandb run
     wandb.finish()

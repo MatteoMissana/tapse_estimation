@@ -28,16 +28,24 @@ def random_rotate(image, keypoints, degrees=(-30, 30), p=0.5):
         # Rotate image
         image = TF.rotate(image, angle)
 
-        # Rotate keypoints
+        # Convert angle to radians
         angle_rad = torch.deg2rad(torch.tensor(angle))
+
+        # Define rotation matrix
         rotation_matrix = torch.tensor([
-            [torch.cos(angle_rad), -torch.sin(angle_rad)],
-            [torch.sin(angle_rad), torch.cos(angle_rad)]
+            [torch.cos(-angle_rad), -torch.sin(-angle_rad)],
+            [torch.sin(-angle_rad), torch.cos(-angle_rad)]
         ])
 
-        keypoints = (keypoints[:] - center) @ rotation_matrix.T + center  # Apply rotation
+        # Ensure keypoints shape is (N, 2) before transformation
+        keypoints = keypoints.view(-1, 2)  # Flatten if necessary
 
-    return image, keypoints
+        # Apply rotation: move to origin -> rotate -> move back
+        keypoints = (keypoints - center) @ rotation_matrix.T + center
+
+    return image, keypoints.view(2, 2)  # Ensure the same shape as input
+
+
 
 def add_gaussian_noise(image, std=0.02):
     """Adds Gaussian noise with given standard deviation."""
@@ -51,21 +59,24 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
     
     elif version == '1':
         image, keypoints = random_h_flip(image, keypoints, p=0.5)
-        # image, keypoints = random_rotate(image, keypoints)
         image = adjust_brightness_contrast(image, contrast_range=(0.8, 1.2))
         image = add_gaussian_noise(image)
 
     elif version == '2':
-        #image, keypoints = random_h_flip(image, keypoints, p=0.5)
-        # image, keypoints = random_rotate(image, keypoints)
         image = adjust_brightness_contrast(image, brightness_range=(0.7, 1.3), contrast_range=(0.7, 1.3))
         image = add_gaussian_noise(image)
     
     elif version == '3':
-        #image, keypoints = random_h_flip(image, keypoints, p=0.5)
-        # image, keypoints = random_rotate(image, keypoints)
+        image = adjust_brightness_contrast(image, brightness_range=(0.5, 1.5), contrast_range=(0.5, 1.5))
+        image = add_gaussian_noise(image, std = 0.08)
+    elif version == '4':
+        image = adjust_brightness_contrast(image, brightness_range=(0.5, 1.5), contrast_range=(0.5, 1.5))
+        image = add_gaussian_noise(image, std = 0.08)
+        image, keypoints = random_rotate(image, keypoints, p=1)
+    elif version == '5':
         image = adjust_brightness_contrast(image, brightness_range=(0.6, 1.4), contrast_range=(0.6, 1.4))
         image = add_gaussian_noise(image, std = 0.06)
+        image, keypoints = random_rotate(image, keypoints, p=.6)
     else:
         raise ValueError(f"Unsupported version: {version}")
 

@@ -7,6 +7,8 @@ from torchvision import transforms as T
 from torchvision.transforms import v2 as T
 from augmentations.aug0 import apply_transform
 from utils.plot import visualize_image
+
+
 class KeypointDataset(Dataset):
     def __init__(self, numpy_dataset, transform=None, filter=False, preprocessing= False, device='cpu', model_type = 'U-Net'):
         """
@@ -22,10 +24,20 @@ class KeypointDataset(Dataset):
         keypoints = file['keypoints']
 
         if filter:
+            # Finding unannotated keypoints
             unannotated_indices = np.where(np.all(keypoints == 0, axis=1))[0]
 
-            images = np.delete(images, unannotated_indices, axis=0)
-            keypoints = np.delete(keypoints, unannotated_indices, axis=0)
+            # Finding out-of-bounds keypoints
+            out_of_bounds_indices = np.where(
+                (keypoints[:, 0] < 0) | (keypoints[:, 0] > 256) |
+                (keypoints[:, 1] < 0) | (keypoints[:, 1] > 256)
+            )[0]
+
+            # Combining both cases
+            invalid_indices = np.unique(np.concatenate((unannotated_indices, out_of_bounds_indices)))
+
+            images = np.delete(images, invalid_indices, axis=0)
+            keypoints = np.delete(keypoints, invalid_indices, axis=0)
 
         self.images = images
         self.keypoints = keypoints
