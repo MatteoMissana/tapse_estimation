@@ -95,7 +95,7 @@ def annotate_2_points_2d_video(file_path):
 
 
 if __name__ == "__main__":
-    folder_path = r"D:\mmissana\data\best_slices"
+    folder_path = r"D:\mmissana\data\best_slices_2"
     for subfolder in os.listdir(folder_path):
         folder = os.path.join(folder_path, subfolder)
         npz_path = os.path.join(folder, 'video_best_slice.npz')

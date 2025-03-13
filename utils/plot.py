@@ -6,42 +6,30 @@ import os
 
 class VolumeViewer:
     def __init__(self, volume, click_radius=5):
-        """
-        Classe per visualizzare un volume 3D e selezionare/rimuovere punti in diverse sezioni.
-
-        :param volume: array 3D (H, W, D). Se il volume è un array NumPy, viene convertito in un array CuPy.
-        :param click_radius: Distanza massima in pixel per rilevare un click vicino a un punto (default: 5)
-        """
-        # Se il volume non è già un array CuPy, lo converto
         if not isinstance(volume, cp.ndarray):
             self.volume = cp.asarray(volume)
         else:
             self.volume = volume
 
-        self.slice_idx = 0  # Indice iniziale della slice
-        self.clicked_points = []  # Lista per memorizzare i punti selezionati
-        self.click_radius = click_radius  # Raggio di click per cancellare i punti
-        self.view_mode = 'XY'  # Modalità di visualizzazione corrente: 'XY', 'ZY', 'XZ'
+        self.slice_idx = 0  
+        self.clicked_points = []
+        self.click_radius = click_radius  
+        self.view_mode = 'XY'  
         self.unit_vectors = []
         self.img = None
 
-        # Crea la figura
         self.fig, self.ax = plt.subplots()
         plt.subplots_adjust(bottom=0.35)
 
-        # Visualizza la slice iniziale
         self.update_image()
 
-        # Aggiunge una barra dei colori
         self.cbar = self.fig.colorbar(self.img, ax=self.ax)
         self.cbar.set_label("Intensity")
 
-        # Aggiunge uno slider per navigare tra le slice
         ax_slider = plt.axes([0.2, 0.1, 0.65, 0.03])
         self.slider = Slider(ax_slider, 'Slice', 0, self.get_max_slices() - 1, valinit=self.slice_idx, valstep=1)
         self.slider.on_changed(self.update_slice)
 
-        # Aggiunge bottoni per cambiare il piano di visualizzazione
         ax_button_xy = plt.axes([0.1, 0.2, 0.15, 0.05])
         ax_button_zy = plt.axes([0.4, 0.2, 0.15, 0.05])
         ax_button_xz = plt.axes([0.7, 0.2, 0.15, 0.05])
@@ -54,11 +42,10 @@ class VolumeViewer:
         self.button_zy.on_clicked(lambda event: self.change_view('ZY'))
         self.button_xz.on_clicked(lambda event: self.change_view('XZ'))
 
-        # Connette l'evento di click del mouse
         self.fig.canvas.mpl_connect('button_press_event', self.onclick)
+        self.fig.canvas.mpl_connect('key_press_event', self.on_key_press)  # Aggiunto listener per la tastiera
 
     def get_max_slices(self):
-        """Restituisce il numero massimo di slice per la modalità di visualizzazione corrente."""
         if self.view_mode == 'XY':
             return self.volume.shape[2]
         elif self.view_mode == 'ZY':
@@ -67,14 +54,11 @@ class VolumeViewer:
             return self.volume.shape[1]
 
     def update_image(self):
-        """Aggiorna l'immagine visualizzata in base al piano corrente."""
         self.ax.clear()
-
         if self.view_mode == 'XY':
-            # Converte la slice da CuPy a NumPy per Matplotlib
             img_data = cp.asnumpy(self.volume[:, :, self.slice_idx])
         elif self.view_mode == 'ZY':
-            img_data = cp.asnumpy(self.volume[self.slice_idx, :, :].T)  # Trasponi per l'allineamento
+            img_data = cp.asnumpy(self.volume[self.slice_idx, :, :].T)
         elif self.view_mode == 'XZ':
             img_data = cp.asnumpy(self.volume[:, self.slice_idx, :])
 
@@ -85,17 +69,13 @@ class VolumeViewer:
         self.fig.canvas.draw_idle()
 
     def update_slice(self, val):
-        """Aggiorna la slice visualizzata quando il valore dello slider cambia."""
         self.slice_idx = int(self.slider.val)
         self.update_image()
 
     def onclick(self, event):
-        """Gestisce il click del mouse per aggiungere/rimuovere punti."""
         if event.inaxes == self.ax:
             x, y = int(event.xdata), int(event.ydata)
-            print("Click:", x, y)
 
-            # Converte (x, y) in coordinate (x, y, z) a seconda del piano
             if self.view_mode == 'XY':
                 z = self.slice_idx
             elif self.view_mode == 'ZY':
@@ -107,27 +87,21 @@ class VolumeViewer:
                 x = y
                 y = self.slice_idx
 
-            # Verifica se il click è vicino ad un punto esistente
             for i, (px, py, pz) in enumerate(self.clicked_points):
                 if (abs(pz - z) <= self.click_radius and
                     abs(px - x) <= self.click_radius and
                     abs(py - y) <= self.click_radius):
-                    print(f"Punto rimosso: (x={px}, y={py}, z={pz})")
                     del self.clicked_points[i]
                     self.redraw_points()
                     return
 
-            # Altrimenti, aggiunge il nuovo punto
             self.clicked_points.append((x, y, z))
-            print(f"Punto aggiunto: (x={x}, y={y}, z={z})")
             self.redraw_points()
             if len(self.clicked_points) == 2:
                 self.calculate_unit_vectors()
 
     def redraw_points(self):
-        """Ridisegna i punti selezionati nella slice corrente."""
         points_in_slice = []
-
         for x, y, z in self.clicked_points:
             if self.view_mode == 'XY' and z == self.slice_idx:
                 points_in_slice.append((x, y))
@@ -143,38 +117,29 @@ class VolumeViewer:
         self.fig.canvas.draw_idle()
 
     def change_view(self, mode):
-        """Cambia il piano di visualizzazione tra XY, ZY ed XZ."""
         self.view_mode = mode
-        self.slice_idx = 0  # Resetta l'indice della slice
+        self.slice_idx = 0  
         self.slider.valmax = self.get_max_slices() - 1
         self.slider.set_val(0)
         self.update_image()
 
     def get_selected_points(self):
-        """Restituisce tutti i punti selezionati."""
         return self.clicked_points
 
     def reset_points(self):
-        """Resetta la lista dei punti selezionati."""
         self.clicked_points = []
         self.redraw_points()
 
     def show(self):
-        """Visualizza la figura."""
         plt.show()
 
     def calculate_unit_vectors(self):
-        """
-        Per ogni coppia di punti selezionati,
-        calcola il vettore unitario che li unisce.
-        """
         self.unit_vectors = []
         if len(self.clicked_points) < 2:
             print("Sono necessari almeno due punti per calcolare il vettore.")
             return
 
         for i in range(0, len(self.clicked_points) - 1, 2):
-            # Converte le tuple in array CuPy
             p1 = cp.array(self.clicked_points[i])
             p2 = cp.array(self.clicked_points[i + 1])
             vector = p2 - p1
@@ -185,6 +150,20 @@ class VolumeViewer:
                 print("I punti sono identici; impossibile calcolare il vettore unitario.")
                 continue
             self.unit_vectors.append(vector)
+
+    def on_key_press(self, event):
+        """Gestisce l'input da tastiera per navigare tra le slices."""
+        if event.key == 'right':  # Freccia destra
+            if self.slice_idx < self.get_max_slices() - 1:
+                self.slice_idx += 1
+        elif event.key == 'left':  # Freccia sinistra
+            if self.slice_idx > 0:
+                self.slice_idx -= 1
+
+        self.slider.set_val(self.slice_idx)  # Aggiorna lo slider
+        self.update_image()
+
+
 
 def visualize_image(image, points=None):
     """

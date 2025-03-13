@@ -4,8 +4,8 @@ import cupy as cp  # For GPU acceleration
 from utils.plot import VolumeViewer
 from utils.extract_slices import crop_black_borders
 
-folder_path = r"D:\mmissana\data\processed_imgs"
-save_path = r"D:\mmissana\data\best_slices"
+folder_path = r"D:\mmissana\data\processed_imgs_2"
+save_path = r"D:\mmissana\data\best_slices_2"
 
 if not os.path.exists(save_path):
     os.makedirs(save_path)
@@ -40,27 +40,28 @@ for subfolder in os.listdir(folder_path):
     viewer.show()
 
     if len(viewer.clicked_points) != 0:
-        best_slice = viewer.clicked_points[0][2]
+        print(viewer.clicked_points)
+        for point in viewer.clicked_points:
+            best_slice = point[2]
 
-        # **Filter only .npz files**
-        npz_files = [f for f in os.listdir(folder) if f.endswith('.npz')]
+            # **Filter only .npz files**
+            npz_files = [f for f in os.listdir(folder) if f.endswith('.npz')]
+            
+            # **Initialize video array on GPU**
+            video = cp.zeros((len(npz_files), imgs.shape[0], imgs.shape[1]), dtype=cp.float32)
+            for i, grid in enumerate(npz_files):
+                imgs_file = np.load(os.path.join(folder, grid))
+                video[i] = cp.asarray(imgs_file['arr_0'][:, :, best_slice])  # Move to GPU
 
-        # **Initialize video array on GPU**
-        video = cp.zeros((len(npz_files), imgs.shape[0], imgs.shape[1]), dtype=cp.float32)
+            # crop the black borders
+            video = video.transpose(1, 2, 0)
+            video = crop_black_borders(video)
+            # **Save back to CPU (CuPy -> NumPy) before writing to disk**
+            np.savez_compressed(os.path.join(save_folder, f'video_{best_slice}.npz'), video=cp.asnumpy(video))
 
-        for i, grid in enumerate(npz_files):
-            imgs_file = np.load(os.path.join(folder, grid))
-            video[i] = cp.asarray(imgs_file['arr_0'][:, :, best_slice])  # Move to GPU
-
-        # crop the black borders
-        video = video.transpose(1, 2, 0)
-        video = crop_black_borders(video)
-        # **Save back to CPU (CuPy -> NumPy) before writing to disk**
-        np.savez_compressed(os.path.join(save_folder, 'video_best_slice.npz'), video=cp.asnumpy(video))
-
-        # **Save the best slice index**
-        with open(txt_path, 'w') as f:
-            f.write(str(best_slice))
+            # **Save the best slice index**
+            with open(txt_path, 'w') as f:
+                f.write(str(best_slice))
     else:
         print(f"No slice selected for {subfolder}")
         with open(txt_path, 'w') as f:

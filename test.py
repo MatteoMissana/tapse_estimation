@@ -1,8 +1,16 @@
-import torch
+import numpy as np
+from utils.plot import VolumeViewer
+import os
 
-state_dict = torch.load("dl_mapse/Data/best_true_weights.pth", map_location="cpu")
+path = 'data/best_slices_2'
+length = 0
 
-if isinstance(state_dict, dict):
-    print("This is a state_dict (weights only). Keys:", state_dict.keys())
-else:
-    print("This is a full model.")
+for folder in os.listdir(path):
+    subfolder = os.path.join(path, folder)
+    for file in os.listdir(subfolder):
+        if file.endswith('.npz'):
+            file_path = os.path.join(subfolder, file)
+            imgs_file = np.load(file_path)
+            length = length + imgs_file['video'].shape[2]
+
+print('NUMBER OF IMAGES:', length)

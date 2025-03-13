@@ -45,6 +45,45 @@ def random_rotate(image, keypoints, degrees=(-30, 30), p=0.5):
 
     return image, keypoints.view(2, 2)  # Ensure the same shape as input
 
+import torch
+import torchvision.transforms.functional as TF
+
+def random_crop(image, keypoints, crop_size = 220, p=0.5):
+    """Randomly crops the image, resizes it back, and adjusts keypoints accordingly."""
+    if torch.rand(1).item() < p:
+        h, w = image.shape[-2], image.shape[-1]
+        crop_h = torch.randint(crop_size, image.shape[-2] + 1, (1,)).item()
+        crop_w = torch.randint(crop_size, image.shape[-1] + 1, (1,)).item()
+
+
+        if h <= crop_h or w <= crop_w:
+            return image, keypoints  # Skip cropping if image is too small
+
+        # Randomly select the top-left corner of the crop
+        top = torch.randint(0, h - crop_h + 1, (1,)).item()
+        left = torch.randint(0, w - crop_w + 1, (1,)).item()
+
+        # Crop the image
+        image = TF.crop(image, top, left, crop_h, crop_w)
+
+        # Resize image back to original size
+        image = TF.resize(image, (h, w))
+
+        # Adjust keypoints
+        keypoints = keypoints.view(-1, 2)  # Ensure keypoints are in (N, 2) format
+        keypoints = keypoints - torch.tensor([left, top])  # Shift keypoints
+
+        # Scale keypoints to match resized image
+        scale_x = w / crop_w
+        scale_y = h / crop_h
+        keypoints = keypoints * torch.tensor([scale_x, scale_y])
+
+        # Keep only keypoints that remain within the resized area
+        # mask = (keypoints[:, 0] >= 0) & (keypoints[:, 0] < w) & \
+        #        (keypoints[:, 1] >= 0) & (keypoints[:, 1] < h)
+        # keypoints = keypoints[mask]
+    
+    return image, keypoints.view(-1, 2)
 
 
 def add_gaussian_noise(image, std=0.02):
@@ -77,6 +116,16 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
         image = adjust_brightness_contrast(image, brightness_range=(0.6, 1.4), contrast_range=(0.6, 1.4))
         image = add_gaussian_noise(image, std = 0.06)
         image, keypoints = random_rotate(image, keypoints, p=.6)
+    elif version == '6':
+        image = adjust_brightness_contrast(image, brightness_range=(0.6, 1.4), contrast_range=(0.6, 1.4))
+        image = add_gaussian_noise(image, std = 0.06)
+        image, keypoints = random_rotate(image, keypoints, p=.5)
+        image, keypoints = random_crop(image, keypoints, crop_size=220, p=.6)
+    elif version == '7':
+        image = adjust_brightness_contrast(image, brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2))
+        image = add_gaussian_noise(image, std = 0.04)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-15, 15), p=.6)
+        image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
     else:
         raise ValueError(f"Unsupported version: {version}")
 

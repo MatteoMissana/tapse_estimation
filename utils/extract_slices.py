@@ -1,11 +1,12 @@
 import numpy as np
 from scipy.ndimage import map_coordinates
 import cupy as cp
-from utils.plot import VolumeViewer
+from utils.plot import VolumeViewer, visualize_image
 from cupyx.scipy.ndimage import rotate, affine_transform
 import math as m
 import h5py
 import os
+import scipy
 
 
 '''these are all functions used to extract the slices from the 3d images.
@@ -767,3 +768,99 @@ def extract_from_hdf5(file_path, save_path, degrees, tric, apex):
             save_path_img = os.path.join(save_path, f"{grid}.npz")
             np.savez_compressed(save_path_img, imgs)
         print(f"Saved images to {save_path}")
+
+def plane_from_points(p1, p2, p3):
+    """Trova l'equazione del piano ax + by + cz + d = 0 passante per tre punti."""
+    v1, v2 = cp.array(p2) - cp.array(p1), cp.array(p3) - cp.array(p1)
+    normal = cp.cross(v1, v2)  # Normale al piano
+    d = -cp.dot(normal, p1)  # Termine noto
+    return normal, d
+
+def generate_plane_grid(p1, p2, p3, shape, spacing):
+    """Genera una griglia regolare di punti su un piano definito da tre punti."""
+    # Definiamo due vettori per il piano
+    v1 = cp.array(p2) - cp.array(p1)
+    v2 = cp.array(p3) - cp.array(p1)
+    
+    # Normalizziamo per ottenere direzioni ortogonali
+    v1 = v1 / cp.linalg.norm(v1)
+    v2 = v2 / cp.linalg.norm(v2)
+    
+    # Creiamo una griglia 2D nel piano
+    grid_x, grid_y = cp.meshgrid(
+        cp.linspace(-1, 1, shape[0])*300, #* cp.linalg.norm(p2 - p1),
+        cp.linspace(-1, 1, shape[1])*300 #* cp.linalg.norm(p3 - p1)
+    )
+    
+    # Convertiamo la griglia 2D in coordinate 3D nel volume
+    grid_3d = cp.array(p1)[:, None, None] + v1[:, None, None] * grid_x + v2[:, None, None] * grid_y
+    return grid_3d
+
+def extract_slice_3_points(volume, spacing, p1, p2, p3, slice_shape=(600, 600)):
+    """Estrae una slice 2D dal volume lungo il piano definito da tre punti."""
+    normal, d = plane_from_points(p1, p2, p3)
+    
+    # Generiamo la griglia del piano
+    grid_3d = generate_plane_grid(p1, p2, p3, slice_shape, spacing)
+    
+    # Convertiamo le coordinate in voxel space
+    grid_3d_voxel = grid_3d / spacing[:, None, None]
+
+    # Interpoliamo i valori sulla slice usando SciPy
+    slice_2d = scipy.ndimage.map_coordinates(
+        cp.asnumpy(volume), 
+        [cp.asnumpy(grid_3d_voxel[i]) for i in range(3)], 
+        order=1, mode='nearest'
+    )
+    
+    return cp.array(slice_2d)
+
+def slice_extraction_three_points(file_path, save_path, degrees, first, second, third):
+    os.makedirs(os.path.dirname(save_path), exist_ok=True)
+    with h5py.File(file_path, 'r') as h5_file:
+        grids = list(h5_file['Input'].keys())
+        input_data = h5_file['Input']['grid00'][:]
+        ground_truth = h5_file['GroundTruth']['grid00'][:]
+        vres = h5_file["VolumeInfo"]["resolution"][()]
+        origin = h5_file["VolumeInfo"]["origin"][()]
+        print('origin', origin)
+        directions = h5_file["VolumeInfo"]["directions"][()]
+        print('directions', directions)
+        shape = h5_file["VolumeInfo"]["shape"][()]
+        print(shape)
+
+        delta = vres * directions / np.linalg.norm(directions, axis=0)
+        def _get_coord(p):
+            return np.round(np.linalg.inv(delta) @ (p - origin)).astype(float)
+        
+
+        coord_first = _get_coord(first)
+        coord_first = abs(coord_first)
+        coord_first[0], coord_first[1] = coord_first[1], coord_first[0]
+        coord_first[1] = shape[1] - coord_first[1]
+
+        coord_second = _get_coord(second)
+        coord_second = abs(coord_second)
+        coord_second[0], coord_second[1] = coord_second[1], coord_second[0]
+        coord_second[1] = shape[1] - coord_second[1]
+
+        coord_third = _get_coord(third)
+        coord_third = abs(coord_third)
+        coord_third[0], coord_third[1] = coord_third[1], coord_third[0]
+        coord_third[1] = shape[1] - coord_third[1]
+        
+        volume_superimposed = input_data + ground_truth
+
+        
+        volume_superimposed = cp.array(volume_superimposed)
+        coord_first = cp.array(coord_first)
+        coord_second = cp.array(coord_second)
+        coord_third = cp.array(coord_third)
+
+        
+
+        spacing = cp.array([1.0, 1.0, 1.0])
+        slice_2d = extract_slice_3_points(volume_superimposed, spacing, coord_first, coord_second, coord_third)
+
+        visualize_image(slice_2d)
+       
