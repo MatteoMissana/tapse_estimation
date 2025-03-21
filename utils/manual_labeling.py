@@ -6,7 +6,7 @@ def press(event):
     global user_input
     user_input = event.key
 
-def annotate_2_points_2d_video(file_path):
+def annotate_2_points_2d_video(file_path, num_landmarks=2):
     """
     Displays frames from a 2D ultrasound video stored in an `.npz` file and allows the user 
     to manually annotate two landmark points per frame. The annotated points are then saved 
@@ -47,7 +47,7 @@ def annotate_2_points_2d_video(file_path):
 
     # Initialize landmark coordinates (2 landmarks per frame)
     num_frames = frames.shape[2]
-    ref_coord = np.zeros((num_frames, 2, 2))  # Shape: (frames, landmarks, (x, y))
+    ref_coord = np.zeros((num_frames, num_landmarks, 2))  # Shape: (frames, landmarks, (x, y))
 
     plt.ion()  # Enable interactive mode
 
@@ -62,7 +62,7 @@ def annotate_2_points_2d_video(file_path):
 
         # Plot previous frame's landmarks in blue, current frame's in red
         prev_idx = idx_max if idx == 0 else idx - 1
-        for j in range(2):
+        for j in range(num_landmarks):
             plt.scatter(ref_coord[idx][j][0], ref_coord[idx][j][1], color='r', marker='*', s=100)  # Current frame
             plt.scatter(ref_coord[prev_idx][j][0], ref_coord[prev_idx][j][1], color='b', marker='*', s=100)  # Previous frame
 
@@ -75,7 +75,7 @@ def annotate_2_points_2d_video(file_path):
             pass
 
         if user_input == "enter":
-            coordinates = plt.ginput(n=2, timeout=0, show_clicks=True)  # Only 2 landmarks
+            coordinates = plt.ginput(n=3, timeout=0, show_clicks=True)  # Only 2 landmarks
             ref_coord[idx] = np.array(coordinates)
         elif user_input == "c":
             print("Saving annotations and closing...")
@@ -95,16 +95,21 @@ def annotate_2_points_2d_video(file_path):
 
 
 if __name__ == "__main__":
-    folder_path = r"D:\mmissana\data\best_slices_2"
+    folder_path = r"data/first_annotated_dataset/difficult_examples"
+    save_folder = r"data/first_annotated_dataset/new_annotations"
     for subfolder in os.listdir(folder_path):
         folder = os.path.join(folder_path, subfolder)
+        folder_save = os.path.join(save_folder, subfolder)
+        os.makedirs(folder_save, exist_ok=True)
         npz_path = os.path.join(folder, 'video_best_slice.npz')
-        new_npz_path = os.path.join(folder, 'video_best_slice_annotations.npz')
+        new_npz_path = os.path.join(folder_save, 'video_best_slice_annotations_new.npz')
 
         # **Check if file exists before loading**
         if not os.path.exists(npz_path) or os.path.exists(new_npz_path):
             print(f"Skipping {subfolder}, video_best_slice.npz not found or annotation has already been done.")
             continue
-
+        
+        print(f"Processing {subfolder}...")
+        print(npz_path)
         # **Load using NumPy**
-        annotate_2_points_2d_video(npz_path)
+        annotate_2_points_2d_video(npz_path, num_landmarks=3)

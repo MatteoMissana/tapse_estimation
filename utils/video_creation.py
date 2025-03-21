@@ -44,6 +44,6 @@ def create_video_from_images(folder_path, output_video, fps=30):
     print(f"Video saved as {output_video}")
 
 if __name__ == "__main__":
-    folder= r'results/Unet_augm3'
+    folder= r'results/Unet_augm7_new_filter'
     output = r'D:\mmissana\best_predictions_video.mp4'
-    create_video_from_images(folder, output, fps=5)
+    create_video_from_images(folder, output, fps=3)
