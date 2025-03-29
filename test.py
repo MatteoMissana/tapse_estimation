@@ -1,23 +1,25 @@
 import os
-import pydicom
+import h5py
+import numpy as np
 
-dicom_folder = "data/2d_focused_rv/RV focused TEE images"
+folder_path = r'data/2d_focused_rv/RV_focused_TEE_images_annotated'
 
-folders = os.listdir(dicom_folder)
-total_size = 0
-dicom_files = 0
-
-for f in folders:
-    f_path = os.path.join(dicom_folder, f)
-    for file in os.listdir(f_path):
-        file_path = os.path.join(f_path, file)
-
-        if os.path.isdir(file_path):
+n_images = 0
+for subfolder in os.listdir(folder_path):
+    if subfolder == 'readme.txt':
+        continue
+    sub_path = os.path.join(folder_path, subfolder)
+    for file in os.listdir(sub_path):
+        if not 'interpolated' in file:
+            # print(f"Skipping {file}, already processed.")
             continue
-
-        try:
-            ds = pydicom.dcmread(file_path)
-            frames = getattr(ds, "NumberOfFrames", 1)  # Default to 1 if not present
-            print(f"📄 {f}: {frames} frames")
-        except:
-            print(f"❌ Skipping non-DICOM file: {f}")
+        file_path = os.path.join(sub_path, file)
+        with h5py.File(file_path, 'r') as h5_file:
+            annotations = h5_file['annotations'][()]
+            if np.all(annotations == 0):
+                # print(f"File {file} has no annotations.")
+                continue
+            else:
+                print(f"{file_path}      {len(annotations)}")
+                n_images += len(annotations)
+print(f"Total number of images with annotations: {n_images}")

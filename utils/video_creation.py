@@ -1,6 +1,9 @@
 import cv2
 import os
 import re
+import h5py
+import numpy as np
+
 
 def create_video_from_images(folder_path, output_video, fps=30):
     """
@@ -43,7 +46,46 @@ def create_video_from_images(folder_path, output_video, fps=30):
     video_writer.release()
     print(f"Video saved as {output_video}")
 
+
+def create_video_from_h5(file_path, output_video_path, num_landmarks=3, fps=30):
+    """
+    Reads ultrasound frames and annotations from an HDF5 file and creates a video with annotated landmarks.
+    """
+    with h5py.File(file_path, 'r') as h5_file:
+        frames = h5_file['frames'][()]
+        frames = np.array(frames)  # Ensure numpy array
+        
+        if 'annotations' in h5_file:
+            ref_coord = h5_file['annotations'][()]
+        else:
+            num_frames = frames.shape[2]
+            ref_coord = np.zeros((num_frames, num_landmarks, 2))
+    
+    if len(frames.shape) < 3:
+        raise ValueError("Frames data has an unexpected shape. Expected 3D array (height, width, num_frames).")
+    
+    height, width = frames.shape[:2]
+    fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+    out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height), isColor=True)
+    
+    colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]  # Red, Green, Blue
+    
+    for i in range(frames.shape[2]):
+        frame = frames[:, :, i].astype(np.uint8)
+        frame_color = cv2.cvtColor(frame, cv2.COLOR_GRAY2BGR)
+        
+        for j in range(num_landmarks):
+            x, y = ref_coord[i][j]
+            if 0 <= x < width and 0 <= y < height:
+                cv2.circle(frame_color, (int(x), int(y)), 2, colors[j % len(colors)], -1)
+        
+        out.write(frame_color)
+    
+    out.release()
+    print(f"Video saved to {output_video_path}")
+
+
 if __name__ == "__main__":
-    folder= r'results/Unet_augm7_new_filter'
-    output = r'D:\mmissana\best_predictions_video.mp4'
-    create_video_from_images(folder, output, fps=3)
+    h5_file= r'data/2d_focused_rv/RV_focused_TEE_images_annotated/__105815/P3KAT3QA_interpolated.h5'
+    output = r'D:\mmissana\annotation_video.mp4'
+    create_video_from_h5(h5_file, output, fps = 2)
