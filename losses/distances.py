@@ -68,6 +68,37 @@ class UnorderedDistanceLoss(nn.Module):
             return min_loss.sum()
         else:
             return min_loss  # Preserves gradients
+        
+class OrderedDistanceLoss(nn.Module):
+    def __init__(self, reduction='mean'):
+        """
+        Custom loss function for ordered keypoints.
+        Computes the Euclidean distance between corresponding keypoints in 'pred' and 'target'.
+
+        :param reduction: Specifies the reduction to apply to the output.
+                          'mean' (default) computes the average loss.
+                          'sum' computes the sum of all losses.
+                          'none' returns loss per sample.
+        """
+        super(OrderedDistanceLoss, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, pred, target):
+        """
+        :param pred: Tensor of predicted keypoints (batch_size, num_points, 2)
+        :param target: Tensor of ground-truth keypoints (batch_size, num_points, 2)
+        :return: Loss value (scalar or per sample)
+        """
+        # Compute Euclidean distance per point
+        distances = torch.norm(pred - target, dim=2)  # Shape: (batch_size, num_points)
+
+        # Reduce based on the chosen method
+        if self.reduction == 'mean':
+            return distances.mean()  # Average over all samples and points
+        elif self.reduction == 'sum':
+            return distances.sum()  # Sum over all samples and points
+        else:
+            return distances  # Return loss per sample
 
 
 # Example usage

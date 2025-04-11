@@ -86,6 +86,7 @@ def create_video_from_h5(file_path, output_video_path, num_landmarks=3, fps=30):
 
 
 if __name__ == "__main__":
-    h5_file= r'data/2d_focused_rv/RV_focused_TEE_images_annotated/__105815/P3KAT3QA_interpolated.h5'
-    output = r'D:\mmissana\annotation_video.mp4'
-    create_video_from_h5(h5_file, output, fps = 2)
+    
+    folder = r'runs/exp24'
+    output = r'D:\mmissana\results_video.mp4'
+    create_video_from_images(folder, output, fps = 5)

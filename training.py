@@ -9,7 +9,7 @@ import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
 
 from dataloader.main import KeypointDataset
-from losses.distances import UnorderedMSELoss, UnorderedDistanceLoss
+from losses.distances import UnorderedMSELoss, UnorderedDistanceLoss, OrderedDistanceLoss
 from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
 from models.echocoder_2dplust import EncoderDecoder_3d
@@ -25,18 +25,19 @@ from callbacks.lr_schedule import ReduceLROnPlateau
 def parse_args():
     parser = argparse.ArgumentParser(description='Train U-Net model for keypoint detection.')
     parser.add_argument('--epochs', type=int, default= 300, help='Number of training epochs')
-    parser.add_argument('--patience', type=int, default=7, help='Early stopping patience')
+    parser.add_argument('--patience', type=int, default=10, help='Early stopping patience')
+    parser.add_argument('--num_keypoints', type=int, default=3, help='Early stopping patience')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
     parser.add_argument('--model', type=str, default='U-Net', help='name of the model: supported "U-Net"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
-    parser.add_argument('--train_data', type=str, default='D:/mmissana/data/dataset_256/train.npz', help='Path to the training dataset')
-    parser.add_argument('--val_data', type=str, default='D:/mmissana/data/dataset_256/val.npz', help='Path to the validation dataset')
+    parser.add_argument('--train_data', type=str, default='data/2d_focused_rv/cleaned_dataset/training.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default='data/2d_focused_rv/dataset_256/val.npz', help='Path to the validation dataset')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
-    parser.add_argument('--wandb_project', type=str, default='tapse', help='tapse')
+    parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
     parser.add_argument('--augm_version', type=str, default='0', help='augmentation version you want to use')
-    parser.add_argument('--loss', type=str, default='MSE', help='select the type of loss: "MSE" or "distance"')
+    parser.add_argument('--loss', type=str, default='ordered_distance', help='select the type of loss: "MSE" or "distance"')
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
@@ -65,7 +66,7 @@ g.manual_seed(args.seed)
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None):
     model.train()
     early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path)
-    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=5, factor=0.5, min_lr=0, initial_lr=args.initial_lr)
+    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=3, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
@@ -221,7 +222,7 @@ def main():
 
     # Define model
     if args.model == "U-Net":
-        model = UNet(num_classes=2, depth=6, start_filts=8).to(device)
+        model = UNet(num_classes=args.num_keypoints, depth=6, start_filts=8).to(device)
         if args.from_scratch:
             initialize_weights(model)
         else:
@@ -239,6 +240,8 @@ def main():
         criterion = UnorderedMSELoss()
     if args.loss == 'distance':
         criterion = UnorderedDistanceLoss()
+    if args.loss == 'ordered_distance':
+        criterion = OrderedDistanceLoss()
 
 
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
@@ -253,12 +256,12 @@ def main():
 
     # Run inference on test set
     model.eval()
-    test_path = 'D:/mmissana/data/dataset_256/test.npz'
+    test_path = 'data/2d_focused_rv/dataset_256/test.npz'
     test_dataset = KeypointDataset(test_path, filter=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 
     metric1 = UnorderedMSELoss()
-    metric2 = UnorderedDistanceLoss()
+    metric2 = OrderedDistanceLoss()
     tester = Tester(metric2, metric1)
     test_distance, test_MSE = tester(model, test_loader, device=device)
 
@@ -279,9 +282,10 @@ def main():
             output = model(im)
             coordinates_1 = center_of_mass(output[0, 0].detach())
             coordinates_2 = center_of_mass(output[0, 1].detach())
+            coordinates_3 = center_of_mass(output[0, 2].detach())
 
             # Save results
-            save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist())], save_folder=save_model_path)
+            save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
 
     #Finish wandb run
     wandb.finish()

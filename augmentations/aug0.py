@@ -38,12 +38,12 @@ def random_rotate(image, keypoints, degrees=(-30, 30), p=0.5):
         ])
 
         # Ensure keypoints shape is (N, 2) before transformation
-        keypoints = keypoints.view(-1, 2)  # Flatten if necessary
+        keypoints = keypoints.view(-1, 2)  # Make sure it's (num_keypoints, 2)
 
         # Apply rotation: move to origin -> rotate -> move back
         keypoints = (keypoints - center) @ rotation_matrix.T + center
 
-    return image, keypoints.view(2, 2)  # Ensure the same shape as input
+    return image, keypoints.view_as(keypoints)  # Restore original shape
 
 import torch
 import torchvision.transforms.functional as TF

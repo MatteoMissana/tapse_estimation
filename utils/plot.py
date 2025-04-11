@@ -182,10 +182,11 @@ def visualize_image(image, points=None):
     plt.axis('off')
     
     # If points are provided, plot them in red
-    if points:
+    if isinstance(points, np.ndarray):
+        plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
+    elif points:
         points = np.array(points)
         plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
-    
     plt.show()
 
 def save_image(image, points=None, save_folder="visualizations"):

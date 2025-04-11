@@ -160,6 +160,7 @@ def dataset_division_from_txt_h5(txt_path, save_path = r'D:\mmissana\data\2d_foc
                 images = h5_file['frames'][()]
                 annotations = h5_file['annotations'][()]
                 images = images.transpose(2, 0, 1)
+                print(images.shape)
                 images, annotations = resize_or_crop_image_np(images, annotations)
                 print(images.shape)
                 print(annotations.shape)

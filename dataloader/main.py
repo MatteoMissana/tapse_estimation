@@ -51,6 +51,8 @@ class KeypointDataset(Dataset):
 
     def __getitem__(self, idx):
         img = self.images[idx]
+        if img.max() > 1:
+            img = img.astype(np.float32) / 255.0  
         img = np.expand_dims(img, axis = 0)
 
         img = preprocess_images(img, model_type = self.model_type, device=self.device)
@@ -64,7 +66,7 @@ class KeypointDataset(Dataset):
             img, keypoint = apply_transform(img, keypoint, version=self.transform)
         
 
-        # visualize_image(img[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist())])
+        # visualize_image(img[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist()), tuple(keypoint[2].tolist())])
 
         return img, keypoint
 

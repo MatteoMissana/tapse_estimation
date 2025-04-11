@@ -6,7 +6,7 @@ import json
 from utils.extract_slices import extract_slices
 
 folder = r"D:\mmissana\data\4DRVQ_Jinyang\voxels"
-save_folder = r"D:\mmissana\data\processed_imgs"
+save_folder = r"D:\mmissana\data\processed_imgs_2"
 checkpoint_file = r"D:\mmissana\data\checkpoint.json"
 
 def load_checkpoint():

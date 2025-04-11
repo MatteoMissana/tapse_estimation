@@ -1,6 +1,6 @@
 import torch
 
-def center_of_mass(tensor: torch.Tensor, thresh=0.9995, device='cpu', normalize = False):
+def center_of_mass(tensor: torch.Tensor, thresh=0.8, device='cpu', normalize = False):
     if len(tensor.shape) != 2:
         raise ValueError("Input tensor must be 2D")
     

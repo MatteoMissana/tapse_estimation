@@ -8,7 +8,7 @@ from utils.extract_slices_new import extract_from_hdf5
 
 '''code that i used to extract the 2d slices from the 3d volume'''
 
-folder = r"data/meshes_da_rifare"
+folder = r"D:\mmissana\data\4DRVQ_Jinyang\voxels"
 save_folder = r"D:\mmissana\data\processed_imgs_2"
 checkpoint_file = r"D:\mmissana\data\checkpoint_3.json"
 

@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import os
 import h5py
 import cv2
+import shutil
 
 
 ''' how to annotate the images:
@@ -152,10 +153,12 @@ def annotate_single_point_per_video_h5(file_path, save_path, num_landmarks=3, LU
         frames = frames[:, ::-1, :]
         frames = frames.astype(np.uint8)
         
-        for i in range(frames.shape[2]):
-            for j in range(frames.shape[0]):
-                for k in range(frames.shape[1]):
-                    frames[j, k, i] = LUT[frames[j, k, i]]
+        # for i in range(frames.shape[2]):
+        #     for j in range(frames.shape[0]):
+        #         for k in range(frames.shape[1]):
+        #             frames[j, k, i] = LUT[frames[j, k, i]]
+
+        frames = np.take(LUT, frames)
     
     # Initialize landmark coordinates (one landmark per frame for each point)
     num_frames = frames.shape[2]
@@ -237,8 +240,10 @@ def reannotate_points_in_h5(file_path, save_path, num_landmarks=3, LUT=None):
     # Open the HDF5 file and load data
     with h5py.File(file_path, 'r') as h5_file:
         frames = h5_file['frames'][()]
+        print("frames shape", frames.shape)
         if 'annotations' in h5_file:
             ref_coord = h5_file['annotations'][()]
+            print("annotations shape", ref_coord.shape)
         else:
             num_frames = frames.shape[2]
             ref_coord = np.zeros((num_frames, num_landmarks, 2))
@@ -288,11 +293,16 @@ def reannotate_points_in_h5(file_path, save_path, num_landmarks=3, LUT=None):
         elif user_input == "up":
             idx = min(idx_max, idx + 10)
         
-        if user_input == "g":
+        elif user_input == "g":
             current_landmark += 1
             # if current_landmark == num_landmarks:
             #     print("All landmarks annotated. Closing session.")
             #     break
+        
+        elif user_input == "1":
+            for i in range(1, len(ref_coord), 2):  # loop through odd indices only
+                ref_coord[i][current_landmark] = np.zeros((2,))
+            print(ref_coord[idx][current_landmark])
     
     plt.ioff()
     plt.close()
@@ -306,106 +316,38 @@ def reannotate_points_in_h5(file_path, save_path, num_landmarks=3, LUT=None):
     
     print(f"Updated annotations saved successfully in {save_path}")
 
-
-
-
-
-# def annotate_2_points_2d_video_h5(file_path, save_path, num_landmarks=2, LUT=None):
-#     """
-#     Displays frames from a 2D ultrasound video stored in an `h5` file and allows the user 
-#     to manually annotate two landmark points per frame. The annotated points are then saved 
-#     as a new `.npz` file.
-
-#     Parameters:
-#     -----------
-#     file_path : str
-#         Path to the `.npz` file containing the ultrasound frames.
-#         The `.npz` file should contain a numpy array with key 'arr_0' 
-#         representing a grayscale video of shape (height, width, num_frames).
-
-#     Functionality:
-#     --------------
-#     - Iterates through the frames of the ultrasound video.
-#     - Allows the user to manually select **two landmark points** per frame using mouse clicks.
-#     - Provides keyboard controls for navigation:
-#         - `Enter` → Select and save 2 points for the current frame.
-#         - `Left/Right arrow` → Move to the previous/next frame.
-#         - `Up/Down arrow` → Jump 10 frames forward/backward.
-#         - `C` → Save and close the annotation session.
-#     - Saves the annotated points as a new `.npz` file with the same name, 
-#       appending `_annotations.npz`.
-
-#     Output:
-#     -------
-#     - A new `.npz` file is created with two arrays:
-#         - `'arr_0'`: Original video frames.
-#         - `'annotations'`: An array of shape (num_frames, 2, 2) storing 
-#           the (x, y) coordinates of the two selected landmarks for each frame.
-#     """
-#     with h5py.File(file_path, 'r') as h5_file:
-#         frames = h5_file['tissue']['data'][()]
-#         frames = frames.transpose(1,0,2)
-#         frames = frames[:, ::-1, :]
-#         frames =frames.astype(np.uint8)
-#         for i in range(frames.shape[2]):
-#             for j in range(frames.shape[0]):
-#                 for k in range(frames.shape[1]):
-#                     frames[j,k,i] = LUT[frames[j,k,i]]
+def find_already_annotated(unannotated_file, annotation_folder, new_annotation_path, LUT):
+    """
+    given a file, check if the same exact vieedo has already been annotated, if so, uses the same annotation
+    """
+    
+    # Open the original HDF5 file and read data
+    with h5py.File(unannotated_file, 'r') as h5_file:
+        frames = h5_file['tissue']['data'][()]
+        frames = frames.transpose(1, 0, 2)
+        frames = frames[:, ::-1, :]
+        frames = frames.astype(np.uint8)
         
+        for i in range(frames.shape[2]):
+            for j in range(frames.shape[0]):
+                for k in range(frames.shape[1]):
+                    frames[j, k, i] = LUT[frames[j, k, i]]
+    
+    for subfolder in os.listdir(annotation_folder):
+        if subfolder != 'readme.txt':
+            folder = os.path.join(annotation_folder, subfolder)
+            for file in os.listdir(folder):
+                file_path = os.path.join(folder, file)
+                print('checking', file)
+                with h5py.File(file_path, 'r') as h5_file_2:
+                    frames_annotated = h5_file_2['frames'][()]
+                    if np.array_equal(frames, frames_annotated):
+                        print(f"Found matching annotation in {file_path}")
+                        shutil.copy(file_path, new_annotation_path)
 
-#     # Initialize landmark coordinates (2 landmarks per frame)
-#     num_frames = frames.shape[2]
-#     ref_coord = np.zeros((num_frames, num_landmarks, 2))  # Shape: (frames, landmarks, (x, y))
 
-#     plt.ion()  # Enable interactive mode
 
-#     idx = 0  # Start at first frame
-#     idx_max = num_frames - 1  # Last frame index
 
-#     while True:
-#         plt.clf()
-#         plt.imshow(frames[:, :, idx], cmap='gray')  # Display current frame
-#         fig = plt.gcf()
-#         fig.set_size_inches(10, 10)
-
-#         # # Plot previous frame's landmarks in blue, current frame's in red
-#         # prev_idx = idx_max if idx == 0 else idx - 1
-#         for j in range(num_landmarks):
-#             if j == 0:
-#                 color = 'r'
-#             elif j == 1:
-#                 color = 'b'
-#             elif j == 2:
-#                 color = 'g'
-#             plt.scatter(ref_coord[idx][j][0], ref_coord[idx][j][1], color=color, marker='*', s=100)  # Current frame
-#         #     plt.scatter(ref_coord[prev_idx][j][0], ref_coord[prev_idx][j][1], color='b', marker='*', s=100)  # Previous frame
-
-#         plt.gcf().canvas.mpl_connect('key_press_event', press)
-
-#         print(f"Frame {idx + 1}/{num_frames}")
-#         print("Enter = correct landmarks, c = close\n")
-
-#         while not plt.waitforbuttonpress(100000):
-#             pass
-
-#         if user_input == "enter":
-#             coordinates = plt.ginput(n=3, timeout=0, show_clicks=True) 
-#             ref_coord[idx] = np.array(coordinates)
-#         elif user_input == "c":
-#             print("Saving annotations and closing...")
-#             np.savez(save_path, frames=frames, annotations=ref_coord)
-#             break
-#         elif user_input == "left":
-#             idx = idx_max if idx == 0 else idx - 1
-#         elif user_input == "right":
-#             idx = 0 if idx == idx_max else idx + 1
-#         elif user_input == "down":
-#             idx = max(0, idx - 10)
-#         elif user_input == "up":
-#             idx = min(idx_max, idx + 10)
-
-#     plt.ioff()
-#     plt.close()
 
 if __name__ == "__main__":
         # Default lookup table for GE
@@ -499,8 +441,8 @@ if __name__ == "__main__":
 
     LUT = np.log(np.array(LUT)).astype(int) + 249
 
-    # folder_path = r"data/2d_focused_rv/RV_focused_TEE_images_converted"
-    # save_folder = r"data/2d_focused_rv/RV_focused_TEE_images_annotated"
+    folder_path = r"D:\mmissana\data\RV_PATIENTS\RV_patients_converted"
+    save_folder = r"D:\mmissana\data\RV_PATIENTS\RV_patients_annotated"
     # for subfolder in os.listdir(folder_path):
     #     folder = os.path.join(folder_path, subfolder)
     #     folder_save = os.path.join(save_folder, subfolder)
@@ -518,5 +460,6 @@ if __name__ == "__main__":
     #     print(file_path)
     #     # **Load using NumPy**
     #     annotate_single_point_per_video_h5(file_path, new_file_path, num_landmarks=3, LUT=LUT)
+        # find_already_annotated(file_path, r'data/2d_focused_rv/RV_focused_TEE_images_annotated', new_file_path, LUT)
 
-    reannotate_points_in_h5(r'data/2d_focused_rv/RV_focused_TEE_images_annotated/__105859/P3KATEQE_interpolated.h5', r'data/2d_focused_rv/RV_focused_TEE_images_annotated/__105859/P3KATEQE_interpolated_corrected.h5', num_landmarks=3, LUT=LUT)
+    reannotate_points_in_h5(r'data/RV_PATIENTS/RV_patients_predicted/_195132/P429PO1Q.h5', r'data/RV_PATIENTS/RV_patients_predicted/_195132/P429PO1Q_corrected.h5', num_landmarks=3, LUT=LUT)

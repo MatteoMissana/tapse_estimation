@@ -273,28 +273,32 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
         # Se l'immagine è più alta che larga, crop + padding
         elif h > target_size[0] and w < target_size[1]:
             crop_h = (h - target_size[0]) // 2
-            pad_w = (target_size[1] - w) // 2
+            pad_w1 = (target_size[1] - w) // 2
+            pad_w2 = target_size[1] - w - pad_w1
             img = img[crop_h:crop_h + target_size[0], :]
-            img = np.pad(img, ((0, 0), (pad_w, pad_w)), mode='constant', constant_values=0)
+            img = np.pad(img, ((0, 0), (pad_w1, pad_w2)), mode='constant', constant_values=0)
             kp[:, 1] -= crop_h
-            kp[:, 0] += pad_w
+            kp[:, 0] += pad_w1
 
         # Se è più larga che alta, padding + crop
         elif h < target_size[0] and w > target_size[1]:
-            pad_h = (target_size[0] - h) // 2
+            pad_h1 = (target_size[0] - h) // 2
+            pad_h2 = target_size[0] - h - pad_h1
             crop_w = (w - target_size[1]) // 2
             img = img[:, crop_w:crop_w + target_size[1]]
-            img = np.pad(img, ((pad_h, pad_h), (0, 0)), mode='constant', constant_values=0)
+            img = np.pad(img, ((pad_h1, pad_h2), (0, 0)), mode='constant', constant_values=0)
             kp[:, 0] -= crop_w
-            kp[:, 1] += pad_h
+            kp[:, 1] += pad_h1
 
         # Se l'immagine è più piccola, padding simmetrico
         else:
-            pad_h = (target_size[0] - h) // 2
-            pad_w = (target_size[1] - w) // 2
-            img = np.pad(img, ((pad_h, pad_h), (pad_w, pad_w)), mode='constant', constant_values=0)
-            kp[:, 0] += pad_w
-            kp[:, 1] += pad_h
+            pad_h1 = (target_size[0] - h) // 2
+            pad_h2 = target_size[0] - h - pad_h1  # Bilancia l'eventuale pixel extra
+            pad_w1 = (target_size[1] - w) // 2
+            pad_w2 = target_size[1] - w - pad_w1
+            img = np.pad(img, ((pad_h1, pad_h2), (pad_w1, pad_w2)), mode='constant', constant_values=0)
+            kp[:, 0] += pad_w1
+            kp[:, 1] += pad_h1
         
         new_imgs[i] = img
         new_keypoints[i] = kp
