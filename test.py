@@ -1,19 +1,19 @@
 import h5py
+import os
+import numpy as np
 
 # Path to one of your new files
-file_path = 'data/RV_PATIENTS/RV_patients_predicted/_11010/P42A0G2A.h5'
+folder_path = 'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated'
 
-# Open the file in read mode
-with h5py.File(file_path, 'r') as h5_file:
-    # Print all top-level datasets/groups
-    print("Top-level keys in the HDF5 file:")
-    for key in h5_file.keys():
-        print(f" - {key}")
-
-    # Check if 'keypoints' exists
-    if 'keypoints' in h5_file:
-        keypoints = h5_file['keypoints'][()]
-        print("\nKeypoints shape:", keypoints.shape)
-        print("Example keypoints (first frame):\n", keypoints[0])
-    else:
-        print("No 'keypoints' dataset found.")
+count = 0
+for subfolder in os.listdir(folder_path):
+    subfolder_path = os.path.join(folder_path, subfolder)
+    for file in os.listdir(subfolder_path):
+        if 'interpolated' in file:
+            file_path = os.path.join(subfolder_path, file)
+            # Open the file in read mode
+            with h5py.File(file_path, 'r') as h5_file:
+                frames = h5_file['frames'][()]
+                print(file_path, frames.shape[2])
+                count += frames.shape[2]
+print(count)

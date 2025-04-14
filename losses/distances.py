@@ -74,31 +74,38 @@ class OrderedDistanceLoss(nn.Module):
         """
         Custom loss function for ordered keypoints.
         Computes the Euclidean distance between corresponding keypoints in 'pred' and 'target'.
-
-        :param reduction: Specifies the reduction to apply to the output.
-                          'mean' (default) computes the average loss.
-                          'sum' computes the sum of all losses.
-                          'none' returns loss per sample.
+        Handles inputs of shape (B, N, 3, 2) or (B, 3, 2).
         """
         super(OrderedDistanceLoss, self).__init__()
         self.reduction = reduction
 
     def forward(self, pred, target):
         """
-        :param pred: Tensor of predicted keypoints (batch_size, num_points, 2)
-        :param target: Tensor of ground-truth keypoints (batch_size, num_points, 2)
+        :param pred: Tensor of predicted keypoints. Shape: (B, N, 3, 2) or (B, 3, 2)
+        :param target: Tensor of ground-truth keypoints. Same shape as pred.
         :return: Loss value (scalar or per sample)
         """
-        # Compute Euclidean distance per point
-        distances = torch.norm(pred - target, dim=2)  # Shape: (batch_size, num_points)
-
-        # Reduce based on the chosen method
-        if self.reduction == 'mean':
-            return distances.mean()  # Average over all samples and points
-        elif self.reduction == 'sum':
-            return distances.sum()  # Sum over all samples and points
+        # Ensure pred and target are 3D: (batch_size * N, 3, 2)
+        if pred.dim() == 4:
+            B, N, P, C = pred.shape  # Usually (1, 64, 3, 2)
+            pred = pred.view(-1, P, C)   # Shape: (B*N, 3, 2)
+            target = target.view(-1, P, C)
+        elif pred.dim() == 3:
+            # Already in shape (B, 3, 2), nothing to change
+            pass
         else:
-            return distances  # Return loss per sample
+            raise ValueError(f"Unexpected input shape: {pred.shape}")
+
+        # Compute Euclidean distances
+        distances = torch.norm(pred - target, dim=2)  # Shape: (B*N, 3)
+
+        # Reduce
+        if self.reduction == 'mean':
+            return distances.mean()
+        elif self.reduction == 'sum':
+            return distances.sum()
+        else:  # 'none'
+            return distances
 
 
 # Example usage

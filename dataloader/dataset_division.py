@@ -97,7 +97,7 @@ def dataset_division_from_txt(txt_path, data_separated_by_video_path = r'D:\mmis
     np.savez_compressed(os.path.join(save_path, 'train.npz'), images=np.array(img_train_list), keypoints=np.array(keypoint_train_list))
 
 
-def dataset_division_from_txt_h5(txt_path, save_path = r'D:\mmissana\data\2d_focused_rv\dataset_256'):
+def dataset_division_from_txt_h5(txt_path, save_path = r'D:\mmissana\data\RV_PATIENTS\dataset_256'):
     
     # Create save directory if it doesn't exist
     if not os.path.exists(save_path):
@@ -195,5 +195,5 @@ def dataset_division_from_txt_h5(txt_path, save_path = r'D:\mmissana\data\2d_foc
     
 # Main execution
 if __name__ == "__main__":
-    txt_path = r'c:\Users\vcxr10\Desktop\dataset_division_draft.txt'  # Path to the dataset division text file
+    txt_path = r'c:\Users\vcxr10\Desktop\dataset_division_by_patient.txt'  # Path to the dataset division text file
     dataset_division_from_txt_h5(txt_path)  # Call the function to process the dataset

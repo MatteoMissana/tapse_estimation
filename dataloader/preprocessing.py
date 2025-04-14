@@ -238,6 +238,8 @@ LUT = [5.416839879697600921e-109, 5.416839879697600921e-109, 5.41683987969760092
        3.716965639127988580e-2, 2.746486762531433201e-1, 2.746486762531433201e-1,
        2.746486762531433201e-1
        ]
+LUT = np.log(np.array(LUT)).astype(int) + 249
+
 
 def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
     """
@@ -305,7 +307,6 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
         
     return new_imgs, new_keypoints
 
-LUT = np.log(np.array(LUT)).astype(int) + 249
 
 if __name__ == "__main__":
     create_numpy_dataset()

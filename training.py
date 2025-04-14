@@ -30,8 +30,8 @@ def parse_args():
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
     parser.add_argument('--model', type=str, default='U-Net', help='name of the model: supported "U-Net"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
-    parser.add_argument('--train_data', type=str, default='data/2d_focused_rv/cleaned_dataset/training.npz', help='Path to the training dataset')
-    parser.add_argument('--val_data', type=str, default='data/2d_focused_rv/dataset_256/val.npz', help='Path to the validation dataset')
+    parser.add_argument('--train_data', type=str, default='data/RV_PATIENTS/dataset_256/train.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default='data/RV_PATIENTS/dataset_256/val.npz', help='Path to the validation dataset')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
@@ -256,7 +256,7 @@ def main():
 
     # Run inference on test set
     model.eval()
-    test_path = 'data/2d_focused_rv/dataset_256/test.npz'
+    test_path = 'data/RV_PATIENTS/dataset_256/test.npz'
     test_dataset = KeypointDataset(test_path, filter=True)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 

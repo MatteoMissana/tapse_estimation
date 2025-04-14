@@ -462,4 +462,4 @@ if __name__ == "__main__":
     #     annotate_single_point_per_video_h5(file_path, new_file_path, num_landmarks=3, LUT=LUT)
         # find_already_annotated(file_path, r'data/2d_focused_rv/RV_focused_TEE_images_annotated', new_file_path, LUT)
 
-    reannotate_points_in_h5(r'data/RV_PATIENTS/RV_patients_predicted/_195132/P429PO1Q.h5', r'data/RV_PATIENTS/RV_patients_predicted/_195132/P429PO1Q_corrected.h5', num_landmarks=3, LUT=LUT)
+    reannotate_points_in_h5(r'data/RV_PATIENTS/RV_patients_annotated/_9101815/P42A93R4.h5', r'data/RV_PATIENTS/RV_patients_annotated/_9101815/P42A93R4_corrected.h5', num_landmarks=3, LUT=LUT)
