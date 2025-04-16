@@ -9,7 +9,7 @@ import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
 
 from dataloader.main import KeypointDataset
-from losses.distances import UnorderedMSELoss, UnorderedDistanceLoss, OrderedDistanceLoss
+from losses.distances import UnorderedMSELoss, UnorderedDistanceLoss, OrderedDistanceLoss, GaussianKeypointLoss
 from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
 from models.echocoder_2dplust import EncoderDecoder_3d
@@ -242,6 +242,8 @@ def main():
         criterion = UnorderedDistanceLoss()
     if args.loss == 'ordered_distance':
         criterion = OrderedDistanceLoss()
+    if args.loss == 'gaussian':
+        criterion = GaussianKeypointLoss(sigma = 20)
 
 
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)

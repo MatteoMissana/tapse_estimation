@@ -108,6 +108,42 @@ class OrderedDistanceLoss(nn.Module):
             return distances
 
 
+class GaussianKeypointLoss(nn.Module):
+    def __init__(self, sigma=1.0, reduction='mean'):
+        """
+        Loss basata su una gaussiana centrata nel punto reale.
+        Loss = 1 - exp(-||pred - target||^2 / (2 * sigma^2))
+        """
+        super(GaussianKeypointLoss, self).__init__()
+        self.sigma = sigma
+        self.reduction = reduction
+
+    def forward(self, pred, target):
+        if pred.dim() == 4:
+            B, N, P, C = pred.shape
+            pred = pred.view(-1, P, C)
+            target = target.view(-1, P, C)
+        elif pred.dim() == 3:
+            pass
+        else:
+            raise ValueError(f"Unexpected input shape: {pred.shape}")
+
+        # Calcolo della distanza quadratica (||x - y||^2)
+        sq_dist = torch.sum((pred - target) ** 2, dim=2)  # Shape: (B*N, 3)
+
+        # Calcolo del valore della gaussiana
+        gaussian = torch.exp(-sq_dist / (2 * self.sigma ** 2))  # max 1, decresce con la distanza
+
+        loss = 1.0 - gaussian  # più lontano => loss più alta
+
+        # Riduzione
+        if self.reduction == 'mean':
+            return loss.mean()
+        elif self.reduction == 'sum':
+            return loss.sum()
+        else:  # 'none'
+            return loss
+
 # Example usage
 if __name__ == "__main__":
     batch_size = 4

@@ -2,6 +2,8 @@ import os
 import numpy as np
 import torch
 import torchvision.transforms.functional as F
+import torch.nn as nn
+
 
 def resize_or_crop_image(img, keypoints, target_size=(256, 256)):
     """
@@ -305,6 +307,71 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
         new_imgs[i] = img
         new_keypoints[i] = kp
         
+    return new_imgs, new_keypoints
+
+def resize_or_crop_image_torch(imgs, keypoints, target_size=(256, 256)):
+    """
+    Ridimensiona o croppa un batch di immagini torch e aggiorna i keypoints corrispondenti.
+    
+    Args:
+        imgs (torch.Tensor): Tensore di shape (N, H, W) contenente N immagini in scala di grigi.
+        keypoints (torch.Tensor): Tensore di shape (N, K, 2) con le coordinate dei keypoints.
+        target_size (tuple): Dimensione target (H, W).
+
+    Returns:
+        torch.Tensor: Batch di immagini ridimensionate/croppate.
+        torch.Tensor: Keypoints aggiornati.
+    """
+    N, H, W = imgs.shape
+    new_imgs = torch.zeros((N, target_size[0], target_size[1]), dtype=imgs.dtype, device=imgs.device)
+    new_keypoints = keypoints.clone()
+
+    for i in range(N):
+        img = imgs[i]
+        kp = keypoints[i].clone()
+        
+        h, w = img.shape
+
+        if h > target_size[0] and w > target_size[1]:
+            crop_h = (h - target_size[0]) // 2
+            crop_w = (w - target_size[1]) // 2
+            img = img[crop_h:crop_h + target_size[0], crop_w:crop_w + target_size[1]]
+            kp[:, 0] -= crop_w
+            kp[:, 1] -= crop_h
+
+        elif h > target_size[0] and w < target_size[1]:
+            crop_h = (h - target_size[0]) // 2
+            pad_w1 = (target_size[1] - w) // 2
+            pad_w2 = target_size[1] - w - pad_w1
+            img = img[crop_h:crop_h + target_size[0], :]
+            pad = nn.ConstantPad2d((pad_w1, pad_w2, 0, 0), 0)
+            img = pad(img)
+            kp[:, 1] -= crop_h
+            kp[:, 0] += pad_w1
+
+        elif h < target_size[0] and w > target_size[1]:
+            pad_h1 = (target_size[0] - h) // 2
+            pad_h2 = target_size[0] - h - pad_h1
+            crop_w = (w - target_size[1]) // 2
+            img = img[:, crop_w:crop_w + target_size[1]]
+            pad = nn.ConstantPad2d((0, 0, pad_h1, pad_h2), 0)
+            img = pad(img)
+            kp[:, 0] -= crop_w
+            kp[:, 1] += pad_h1
+
+        else:
+            pad_h1 = (target_size[0] - h) // 2
+            pad_h2 = target_size[0] - h - pad_h1
+            pad_w1 = (target_size[1] - w) // 2
+            pad_w2 = target_size[1] - w - pad_w1
+            pad = nn.ConstantPad2d((pad_w1, pad_w2, pad_h1, pad_h2), 0)
+            img = pad(img)
+            kp[:, 0] += pad_w1
+            kp[:, 1] += pad_h1
+
+        new_imgs[i] = img
+        new_keypoints[i] = kp
+
     return new_imgs, new_keypoints
 
 
