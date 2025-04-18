@@ -3,17 +3,23 @@ import os
 import numpy as np
 
 # Path to one of your new files
-folder_path = 'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated'
+path = r'D:\mmissana/data/RV_PATIENTS/RV_patients_converted/_11010/P42A0G2A.h5'
 
-count = 0
-for subfolder in os.listdir(folder_path):
-    subfolder_path = os.path.join(folder_path, subfolder)
-    for file in os.listdir(subfolder_path):
-        if 'interpolated' in file:
-            file_path = os.path.join(subfolder_path, file)
-            # Open the file in read mode
-            with h5py.File(file_path, 'r') as h5_file:
-                frames = h5_file['frames'][()]
-                print(file_path, frames.shape[2])
-                count += frames.shape[2]
-print(count)
+def stampa_contenuto_gruppo(gruppo, indent=0):
+    for chiave in gruppo:
+        oggetto = gruppo[chiave]
+        print("  " * indent + f"- {chiave} ({type(oggetto)})")
+        if isinstance(oggetto, h5py.Group):
+            stampa_contenuto_gruppo(oggetto, indent + 1)
+        elif isinstance(oggetto, h5py.Dataset):
+            print("  " * (indent + 1) + f"  shape: {oggetto.shape}, dtype: {oggetto.dtype}")
+
+# Sostituisci 'nome_file.h5' con il tuo file
+with h5py.File(path, 'r') as f:
+    print("Contenuto del file:")
+    stampa_contenuto_gruppo(f)
+    times = f['ecg']['ecg_times'][()]
+
+print(1/(times[1] - times[0]))
+print(1/(times[2] - times[1]))
+   
