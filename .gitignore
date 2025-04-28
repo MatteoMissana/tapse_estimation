@@ -1,3 +1,9 @@
 .idea/
 .venv/
 utils/__pycache__/
+/runs/
+/checkpoints/
+/wandb/
+annotation_video.mp4
+best_predictions_video.mp4
+results_video.mp4
