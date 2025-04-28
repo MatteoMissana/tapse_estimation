@@ -1,9 +1,13 @@
 .idea/
 .venv/
 utils/__pycache__/
-/runs/
+runs/
+checkpoints/
+2d+t/checkpoints/
 /checkpoints/
 /wandb/
 annotation_video.mp4
 best_predictions_video.mp4
 results_video.mp4
+
+*.pth
