@@ -107,6 +107,49 @@ class OrderedDistanceLoss(nn.Module):
         else:  # 'none'
             return distances
 
+class OrderedDistanceLoss_3d(nn.Module):
+    def __init__(self, reduction='mean'):
+        """
+        Custom loss function for ordered keypoints.
+        Computes the Euclidean distance between corresponding keypoints in 'pred' and 'target'.
+        Handles inputs of shape (B, N, 3, 2) or (B, 3, 2).
+        """
+        super(OrderedDistanceLoss_3d, self).__init__()
+        self.reduction = reduction
+
+    def forward(self, pred, target):
+        """
+        :param pred: Tensor of predicted keypoints. Shape: (B, N, 3, 2) or (B, 3, 2)
+        :param target: Tensor of ground-truth keypoints. Same shape as pred.
+        :return: Loss value (scalar or per sample)
+        """
+        # Ensure pred and target are 3D: (batch_size * N, 3, 2)
+        # print(f"pred shape: {pred.shape}")
+        if pred.dim() == 4:
+            B, N, P, C = pred.shape  # Usually (1, 64, 3, 2)
+            pred = pred.view(-1, P, C)   # Shape: (B*N, 3, 2)
+            target = target.view(-1, P, C)
+        elif pred.dim() == 3:
+            # Already in shape (B, 3, 2), nothing to change
+            pass
+        else:
+            raise ValueError(f"Unexpected input shape: {pred.shape}")
+        
+        # print(f"pred shape after: {pred.shape}")
+
+
+        # Compute Euclidean distances
+        distances = torch.linalg.norm(pred - target, ord = 2, dim=2)  # Shape: (B*N, 3)
+
+        # Reduce
+        if self.reduction == 'mean':
+            return distances.mean()
+        elif self.reduction == 'sum':
+            return distances.sum()
+        elif self.reduction == 'max':
+            return distances.max()
+        else:  # 'none'
+            return distances
 
 class GaussianKeypointLoss(nn.Module):
     def __init__(self, sigma=1.0, reduction='mean'):

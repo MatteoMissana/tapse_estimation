@@ -1,9 +1,10 @@
+# Import necessary libraries
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import h5py
 
-
+# Import custom preprocessing, model, and postprocessing utilities
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
 from models.tasken_unet import UNet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
@@ -13,53 +14,69 @@ from postprocessing.cardiac_phase_detection import systole_diatole_detection
 from postprocessing.pan_tompkins import pan_tompkins_detector
 from utils.plot import visualize_image
 
+# Path to test data and trained model
 test_path = r'D:\mmissana\data/RV_PATIENTS/RV_patients_converted/_7101239/P42A69QU.h5'
-
 model_checkpoint = r'D:\mmissana\runs\unet_augm7_gaussian_curve_training\best_model.pth'
+
+# Set device to GPU if available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+# Initialize and load the trained U-Net model
 model = UNet(num_classes=3, depth=6, start_filts=8).to(device)
 model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
 
 def predict_indices(model, test_path):
     """
-    Predicts the indices of the tricuspid valve using a trained model
-    args:
-        model: trained model
-        test_path: path to the h5 file with images and ecg data
-    returns:
-        rvlsf: mean value of the RVLSF from the heartcycles
-        tapse: same for tapse
+    Predicts the RVLSF index from a cardiac sequence using a trained segmentation model.
+    
+    Args:
+        model: Trained PyTorch model for image segmentation.
+        test_path: Path to the .h5 file containing the ultrasound images and ECG data.
+    
+    Returns:
+        Mean RVLSF index over detected heartbeats.
     """
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Load image and ECG data from HDF5 file
     with h5py.File(test_path, 'r') as f:
         images = f['tissue']['data'][()]
         images_times = f['tissue']['times'][()]
         ecg = f['ecg']['ecg_data'][()]
         ecg_times = f['ecg']['ecg_times'][()]
 
-        # Get the sampling frequency from the ECG times
+        # Compute sampling frequency of ECG
         fs = 1 / (ecg_times[1] - ecg_times[0])
 
-        # Rearrange axes so the frame format matches expected input (H, W, C)
+        # Reorder image dimensions: (frames, height, width) → (height, width, frames)
         images = images.transpose(1, 0, 2)
 
-        # Flip the frames vertically (mirror image over horizontal axis)
+        # Flip images vertically (correct orientation)
         images = images[:, ::-1, :]
+
+        # Apply LUT and preprocess images
         images = apply_lut(images)
-        images = images.transpose(2,0,1)
+        images = images.transpose(2, 0, 1)  # Back to (frames, H, W)
         images = resize_or_crop_image_np_nokeypoints(images)
 
+    # Normalize pixel values if necessary
     if images.max() > 1:
         images = images / 255.0
 
     apex_distances = []
     filtered_distances = []
+    diameters = []
+    filtered_diameters = []
 
-    kalman_filter = KalmanFilter(process_variance= .05, measurement_variance=5e-2, initial_estimate=0, initial_error=10)
+    # Initialize Kalman filter for smoothing distance measurements
+    kalman_filter = KalmanFilter(process_variance=0.05, measurement_variance=5e-2, initial_estimate=0, initial_error=10)
+    kalman_diameter = KalmanFilter(process_variance=0.05, measurement_variance=5e-2, initial_estimate=0, initial_error=10)
 
+    # Detect R-peaks in ECG using Pan-Tompkins algorithm
     r_peaks = pan_tompkins_detector(ecg, fs)
 
+    # Find corresponding image frame indices for each R-peak
     beat_start = []
     for r in r_peaks:
         time_diff = np.abs(images_times - ecg_times[r])
@@ -68,29 +85,39 @@ def predict_indices(model, test_path):
 
     flag_first = True
     for i, im in enumerate(images):
+        # Prepare image for input to model
         im = np.expand_dims(im, axis=0)
         im = preprocess_images(im, model_type='U-Net', device=device)
+        im = im.float().unsqueeze(0).to(device)
 
-        im = im.float()
-        im = im.unsqueeze(0).to(device)
-
+        # Run segmentation model
         output = model(im)
 
+        # Extract coordinates of segmented structures via center of mass
         coordinates_1 = center_of_mass(output[0, 0].detach())
         coordinates_2 = center_of_mass(output[0, 1].detach())
         coordinates_3 = center_of_mass(output[0, 2].detach())
 
-        apex_dist = tric_apex_distance_calculation(coordinates_1, coordinates_2, coordinates_3)
+        # Calculate distance between tricuspid valve and apex
+        apex_dist, diameter = tric_apex_distance_calculation(coordinates_1, coordinates_2, coordinates_3)
+
         if flag_first:
+            kalman_filter.initial_estimate = apex_dist
+            kalman_diameter.initial_estimate = diameter
             flag_first = False
 
-        filtered_value = kalman_filter.update(apex_dist)
+        # Apply Kalman filter for temporal smoothing
+        filtered_distance = kalman_filter.update(apex_dist)
+        filtered_diameter = kalman_diameter.update(diameter)
 
         apex_distances.append(apex_dist)
-        filtered_distances.append(filtered_value)
+        filtered_distances.append(filtered_distance)
+        diameters.append(diameter)
+        filtered_diameters.append(filtered_diameter)
         filtered_array = np.array(filtered_distances)
-        
+        filtered_diameters_array = np.array(filtered_diameters)
 
+    # Optional plot for visual inspection (currently commented out)
     # plt.figure(figsize=(12, 6))
     # plt.plot(apex_distances, label="Raw Distance", linestyle='--', marker='o')
     # plt.plot(filtered_distances, label="Filtered Distance", linestyle='-', marker='x')
@@ -100,21 +127,25 @@ def predict_indices(model, test_path):
     # plt.legend()
     # plt.grid(True)
     # plt.tight_layout()
-    # plt.show()    
+    # plt.show()
 
     rvlsf = []
 
+    # Compute RVLSF for each heartbeat segment
     for i, start in enumerate(beat_start):
         if start != 0 and start != len(images) and i < len(beat_start) - 1:
-            window = filtered_array[beat_start[i]:beat_start[i+1]] 
+            window = filtered_array[beat_start[i]:beat_start[i+1]]
 
             diast_distance = window.max()
             syst_distance = window.min()
+
+            # RVLSF is the relative shortening between diastole and systole
             rvlsf.append(((diast_distance - syst_distance) / diast_distance) * 100)
 
     rvlsf = np.array(rvlsf)
-    return rvlsf.mean()
+    return rvlsf.mean()  # Return mean RVLSF across all cycles
 
+# Entry point to execute the function and print the result
 if __name__ == "__main__":
     rvlsf = predict_indices(model, test_path)
     print(f"RVLSF: {rvlsf:.2f}%")

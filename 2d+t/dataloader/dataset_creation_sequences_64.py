@@ -45,13 +45,12 @@ class RandomClipDataset(Dataset):
         if clip.shape[1] or clip.shape[2] != 256:
             clip, keypoints = resize_or_crop_image_torch(clip, keypoints, target_size=(256, 256))
 
-        if clip.max() > 1:
-            clip = clip / 255.0
-
         if self.transform:
             clip, keypoints = apply_transform(clip, keypoints, version=self.transform)
         clip = clip.unsqueeze(0)  # Shape: (1, 1, clip_length, H, W)
-        
+
+        clip = clip-clip.min()
+        clip = clip / clip.max()  # Normalize to [0, 1]
         return clip, keypoints
     
 class ValidationClipDataset(Dataset):
@@ -99,8 +98,8 @@ class ValidationClipDataset(Dataset):
         
         clip = clip.unsqueeze(0)  # Shape: (1, clip_length, C, H, W)
 
-        if clip.max() > 1:
-                    clip = clip / 255.0
+        clip = clip - clip.min()
+        clip = clip / clip.max()
 
         return clip, keypts
     

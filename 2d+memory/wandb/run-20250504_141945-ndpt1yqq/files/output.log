@@ -1,0 +1,95 @@
+d:\mmissana\tapse_estimation\2d+memory\models\tasken_unet_with_memory.py:111: UserWarning: nn.init.xavier_normal is now deprecated in favor of nn.init.xavier_normal_.
+  init.xavier_normal(m.weight)
+d:\mmissana\tapse_estimation\2d+memory\models\tasken_unet_with_memory.py:112: UserWarning: nn.init.constant is now deprecated in favor of nn.init.constant_.
+  init.constant(m.bias, 0)
+Training Epoch 1/300:   0%|                                                                                                                                                                                                                                                                                                                                                        | 0/308 [00:00<?, ?batch/s]C:\Users\vcxr10\anaconda3\Lib\site-packages\torchvision\transforms\functional.py:1603: UserWarning: The default value of the antialias parameter of all the resizing transforms (Resize(), RandomResizedCrop(), etc.) will change from None to True in v0.17, in order to be consistent across the PIL and Tensor backends. To suppress this warning, directly pass antialias=True (recommended, future default), antialias=None (current default, which means False for Tensors and True for PIL), or antialias=False (only works on Tensors - PIL will still use antialiasing). This also applies if you are using the inference transforms from the models weights: update the call to weights.transforms(antialias=True).
+  warnings.warn(
+Training Epoch 1/300:   0%|                                                                                                                                                                                                                                                                                                                                                        | 0/308 [00:00<?, ?batch/s]
+Traceback (most recent call last):
+  File "d:\mmissana\tapse_estimation\2d+memory\training_memory.py", line 298, in <module>
+    main()
+  File "d:\mmissana\tapse_estimation\2d+memory\training_memory.py", line 260, in main
+    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path, save_model_path, thresh=args.thresh)
+  File "d:\mmissana\tapse_estimation\2d+memory\training_memory.py", line 83, in train_model
+    outputs = model(images)  # Forward pass
+             ^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "d:\mmissana\tapse_estimation\2d+memory\models\tasken_unet_with_memory.py", line 124, in forward
+    x, before_pool = module(x)
+                     ^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "d:\mmissana\tapse_estimation\2d+memory\models\tasken_unet_with_memory.py", line 29, in forward
+    x = F.relu(self.conv1(x))
+               ^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1518, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\module.py", line 1527, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\conv.py", line 460, in forward
+    return self._conv_forward(input, self.weight, self.bias)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\vcxr10\anaconda3\Lib\site-packages\torch\nn\modules\conv.py", line 456, in _conv_forward
+    return F.conv2d(input, weight, bias, self.stride,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: Given groups=1, weight of size [8, 3, 3, 3], expected input[16, 4, 256, 256] to have 3 channels, but got 4 channels instead
+Epoch 1/300
+[[56.68441558441559, 97.07922077922076], [130.8246753246753, 74.13896103896103], [168.22727272727272, 220.75714285714287]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[43.05324675324675, 127.99870129870128], [102.75846099853516, 85.93179321289062], [152.26883116883116, 212.61168831168828]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[60.009090909090915, 140.29999999999998], [125.33896103896103, 101.40129870129869], [175.2090909090909, 232.89220779220778]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[55.35454545454546, 129.16233766233762], [122.34675324675324, 88.76753246753245], [175.54155844155844, 239.54155844155844]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[54.2612247467041, 154.1177520751953], [106.20024108886719, 105.01880645751953], [153.4324675324675, 218.0974025974026]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[76.3, 143.45844155844154], [136.6428571428571, 123.0116883116883], [163.07402597402597, 233.72337662337662]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[85.44285714285712, 133.15194805194804], [132.98756408691406, 87.8690185546875], [181.19350649350648, 210.61688311688312]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[77.13116883116882, 131.15714285714284], [127.66623376623374, 114.2012987012987], [177.86883116883115, 240.87142857142857]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[56.94875526428223, 139.38702392578125], [113.65069961547852, 80.64005661010742], [179.69740259740257, 198.64805194805194]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[41.55714285714286, 121.18311688311687], [101.73376623376623, 55.354545454545445], [146.32362365722656, 180.37060546875]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[55.20603639676973, 139.62681090119597], [125.5051948051948, 120.01948051948051], [141.6298701298701, 233.2246753246753]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[85.77532467532465, 146.11818181818182], [141.6298701298701, 96.24805194805192], [207.95714285714286, 219.26103896103893]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[68.48701298701297, 156.42467532467532], [117.46988677978516, 118.7572250366211], [144.23280334472656, 241.8189697265625]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[74.49481201171875, 134.9563446044922], [134.14935064935065, 80.95454545454542], [201.64025974025975, 225.74415584415584]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[71.47922077922078, 107.2194805194805], [119.35454545454544, 89.9311688311688], [140.63246753246753, 198.98051948051946]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])
+[[82.11818181818182, 134.8142857142857], [135.7211456298828, 82.70101928710938], [181.19350649350648, 210.61688311688312]]
+porcodiooooooooooooooooooooooooooooooooooooooooo
+Input shape: torch.Size([1, 4, 256, 256])

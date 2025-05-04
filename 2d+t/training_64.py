@@ -12,7 +12,7 @@ import h5py
 
 from dataloader.main import KeypointDataset
 from dataloader.dataset_creation_sequences_64 import RandomClipDataset, ValidationClipDataset, RandomClipDataset_gaussian_map
-from losses.distances import OrderedDistanceLoss, GaussianKeypointLoss
+from losses.distances import OrderedDistanceLoss_3d, GaussianKeypointLoss,OrderedDistanceLoss
 from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
 from models.models import EncoderDecoder_3d
@@ -79,15 +79,20 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 images, masks = images.to(device), masks.to(device)
                 optimizer.zero_grad()
                 
+                # print(masks[0, 0, 0])
+                # print(masks[0, 1, 0])
+                # print(masks[0, 2, 0])
                 # print(f"Images shape: {images.shape}, Masks shape: {masks.shape}")
-                # visualize_image(images[0, 0, 0].cpu().numpy(), points=[tuple(masks[0, 0, 0].tolist()), tuple(masks[0, 0, 1].tolist()), tuple(masks[0, 0, 2].tolist())])
-                # visualize_image(images[0, 0, 1].cpu().numpy(), points=[tuple(masks[0, 1, 0].tolist()), tuple(masks[0, 1, 1].tolist()), tuple(masks[0, 1, 2].tolist())])
+                # for i in range(5):
+                #     visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
+
+                # print(images.max(), images.min())
 
                 # print(images.shape)
                 outputs = model(images)  # Forward pass
+                outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
                 # print(f"Outputs shape: {outputs.shape}, Masks shape: {masks.shape}")
 
-                # print(masks.shape, outputs.shape)
                 # visualize_image(masks[0, 0, 0].cpu().numpy())
                 # visualize_image(outputs[0, 0, 0].cpu().detach().numpy())
 
@@ -99,9 +104,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                         for frame in output])
                     for output in outputs]).to(device)
 
-                    print(f"com_tensor shape: {com_tensor.shape}, Masks shape: {masks.shape}")
-                    com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
-
+                    # print(com_tensor[0,0,0])
+                    # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
+                    
                     loss = criterion(com_tensor, masks)
 
                 elif args.loss == 'MSE':
@@ -152,6 +157,7 @@ def validate(model, val_loader, criterion):
         for images, masks in val_loader:
             images, masks = images.to(device), masks.to(device)
             outputs = model(images)
+            outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
 
             # Compute center of mass for output masks
             com_tensor = torch.stack([
@@ -160,7 +166,7 @@ def validate(model, val_loader, criterion):
                 for frame in output])
             for output in outputs]).to(device)
 
-            com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
+            # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
 
             loss = criterion(com_tensor, masks)
             val_loss += loss.item()
@@ -201,6 +207,7 @@ class Tester:
             for images, masks in test_loader:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
+                outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
 
                 # Compute center of mass for output masks
                 com_tensor = torch.stack([
@@ -209,7 +216,7 @@ class Tester:
                     for frame in output])
                 for output in outputs]).to(device)
 
-                com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
+                # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
                 
                 loss1 = self.criterion1(com_tensor, masks)
                 loss2 = self.criterion2(com_tensor, masks)
@@ -313,11 +320,11 @@ def main():
     # Define loss function and optimizer
     if args.loss == 'MSE':
         criterion = OrderedDistanceLoss() 
-    if args.loss == 'distance':
+    elif args.loss == 'distance':
         criterion = UnorderedDistanceLoss()
-    if args.loss == 'ordered_distance':
-        criterion = OrderedDistanceLoss()
-    if args.loss == 'gaussian':
+    elif args.loss == 'ordered_distance':
+        criterion = OrderedDistanceLoss_3d(reduction='sum')
+    elif args.loss == 'gaussian':
         criterion = GaussianKeypointLoss(sigma = 20)
     else:
         criterion = OrderedDistanceLoss()

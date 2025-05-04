@@ -1,0 +1,55 @@
+2025-05-04 14:21:55,528 INFO    StreamThr :22804 [internal.py:wandb_internal():86] W&B internal server running at pid: 22804, started at: 2025-05-04 14:21:55.526954
+2025-05-04 14:21:55,529 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: status
+2025-05-04 14:21:55,533 INFO    WriterThread:22804 [datastore.py:open_for_write():85] open: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\run-3dqh074h.wandb
+2025-05-04 14:21:55,535 DEBUG   SenderThread:22804 [sender.py:send():380] send: header
+2025-05-04 14:21:55,583 DEBUG   SenderThread:22804 [sender.py:send():380] send: run
+2025-05-04 14:21:56,069 INFO    SenderThread:22804 [dir_watcher.py:__init__():211] watching files in: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files
+2025-05-04 14:21:56,069 INFO    SenderThread:22804 [sender.py:_start_run_threads():1124] run started: 3dqh074h with start time 1746361315.528949
+2025-05-04 14:21:56,081 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: check_version
+2025-05-04 14:21:56,081 DEBUG   SenderThread:22804 [sender.py:send_request():407] send_request: check_version
+2025-05-04 14:21:56,203 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: run_start
+2025-05-04 14:21:56,233 DEBUG   HandlerThread:22804 [system_info.py:__init__():32] System info init
+2025-05-04 14:21:56,233 DEBUG   HandlerThread:22804 [system_info.py:__init__():47] System info init done
+2025-05-04 14:21:56,233 INFO    HandlerThread:22804 [system_monitor.py:start():194] Starting system monitor
+2025-05-04 14:21:56,233 INFO    SystemMonitor:22804 [system_monitor.py:_start():158] Starting system asset monitoring threads
+2025-05-04 14:21:56,234 INFO    HandlerThread:22804 [system_monitor.py:probe():214] Collecting system info
+2025-05-04 14:21:56,236 INFO    SystemMonitor:22804 [interfaces.py:start():190] Started cpu monitoring
+2025-05-04 14:21:56,236 INFO    SystemMonitor:22804 [interfaces.py:start():190] Started disk monitoring
+2025-05-04 14:21:56,237 INFO    SystemMonitor:22804 [interfaces.py:start():190] Started gpu monitoring
+2025-05-04 14:21:56,237 INFO    SystemMonitor:22804 [interfaces.py:start():190] Started memory monitoring
+2025-05-04 14:21:56,256 INFO    SystemMonitor:22804 [interfaces.py:start():190] Started network monitoring
+2025-05-04 14:21:56,258 DEBUG   HandlerThread:22804 [system_info.py:probe():196] Probing system
+2025-05-04 14:21:56,260 DEBUG   HandlerThread:22804 [system_info.py:_probe_git():181] Probing git
+2025-05-04 14:21:56,345 DEBUG   HandlerThread:22804 [system_info.py:_probe_git():189] Probing git done
+2025-05-04 14:21:56,346 DEBUG   HandlerThread:22804 [system_info.py:probe():244] Probing system done
+2025-05-04 14:21:56,346 DEBUG   HandlerThread:22804 [system_monitor.py:probe():223] {'os': 'Windows-10-10.0.19045-SP0', 'python': '3.11.5', 'heartbeatAt': '2025-05-04T12:21:56.258087', 'startedAt': '2025-05-04T12:21:55.516980', 'docker': None, 'cuda': None, 'args': ('--from_scratch', '--augm', '7', '--save_images'), 'state': 'running', 'program': 'd:\\mmissana\\tapse_estimation\\2d+memory\\training_memory.py', 'codePathLocal': 'training_memory.py', 'codePath': '2d+memory\\training_memory.py', 'git': {'remote': 'https://github.com/MatteoMissana/tapse_estimation', 'commit': '6913397cdb467e04a87e2947e3f87ba32a2a9357'}, 'email': 'missanamatteo@gmail.com', 'root': 'D:/mmissana/tapse_estimation', 'host': 'vcxr10', 'username': 'vcxr10', 'executable': 'C:\\Users\\vcxr10\\anaconda3\\python.exe', 'cpu_count': 6, 'cpu_count_logical': 12, 'cpu_freq': {'current': 3696.0, 'min': 0.0, 'max': 3696.0}, 'cpu_freq_per_core': [{'current': 3696.0, 'min': 0.0, 'max': 3696.0}], 'disk': {'/': {'total': 1863.0126914978027, 'used': 681.1287841796875}}, 'gpu': 'NVIDIA GeForce GTX 1080', 'gpu_count': 1, 'gpu_devices': [{'name': 'NVIDIA GeForce GTX 1080', 'memory_total': 8589934592}], 'memory': {'total': 31.955890655517578}}
+2025-05-04 14:21:56,346 INFO    HandlerThread:22804 [system_monitor.py:probe():224] Finished collecting system info
+2025-05-04 14:21:56,346 INFO    HandlerThread:22804 [system_monitor.py:probe():227] Publishing system info
+2025-05-04 14:21:56,346 DEBUG   HandlerThread:22804 [system_info.py:_save_pip():52] Saving list of pip packages installed into the current environment
+2025-05-04 14:21:56,347 DEBUG   HandlerThread:22804 [system_info.py:_save_pip():68] Saving pip packages done
+2025-05-04 14:21:56,347 DEBUG   HandlerThread:22804 [system_info.py:_save_conda():75] Saving list of conda packages installed into the current environment
+2025-05-04 14:21:57,083 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_created():271] file/dir created: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\conda-environment.yaml
+2025-05-04 14:21:57,084 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_created():271] file/dir created: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\requirements.txt
+2025-05-04 14:21:59,095 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_modified():288] file/dir modified: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\conda-environment.yaml
+2025-05-04 14:21:59,151 DEBUG   HandlerThread:22804 [system_info.py:_save_conda():87] Saving conda packages done
+2025-05-04 14:21:59,151 INFO    HandlerThread:22804 [system_monitor.py:probe():229] Finished publishing system info
+2025-05-04 14:21:59,157 DEBUG   SenderThread:22804 [sender.py:send():380] send: files
+2025-05-04 14:21:59,157 INFO    SenderThread:22804 [sender.py:_save_file():1380] saving file wandb-metadata.json with policy now
+2025-05-04 14:21:59,165 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: stop_status
+2025-05-04 14:21:59,166 DEBUG   SenderThread:22804 [sender.py:send_request():407] send_request: stop_status
+2025-05-04 14:21:59,167 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: internal_messages
+2025-05-04 14:21:59,369 DEBUG   SenderThread:22804 [sender.py:send():380] send: telemetry
+2025-05-04 14:21:59,900 INFO    wandb-upload_0:22804 [upload_job.py:push():131] Uploaded file C:\Users\vcxr10\AppData\Local\Temp\tmp159bnq56wandb\6g4l7qx5-wandb-metadata.json
+2025-05-04 14:22:00,099 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_created():271] file/dir created: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\wandb-metadata.json
+2025-05-04 14:22:01,385 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: status_report
+2025-05-04 14:22:03,107 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_created():271] file/dir created: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\output.log
+2025-05-04 14:22:05,115 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_modified():288] file/dir modified: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\output.log
+2025-05-04 14:22:06,390 DEBUG   HandlerThread:22804 [handler.py:handle_request():146] handle_request: status_report
+2025-05-04 14:22:07,119 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_modified():288] file/dir modified: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\output.log
+2025-05-04 14:22:09,123 INFO    Thread-16 :22804 [dir_watcher.py:_on_file_modified():288] file/dir modified: D:\mmissana\tapse_estimation\2d+memory\wandb\run-20250504_142155-3dqh074h\files\output.log
+2025-05-04 14:22:10,271 INFO    memory    :22804 [interfaces.py:monitor():140] Process proc.memory.rssMB has exited.
+2025-05-04 14:22:10,272 INFO    MainThread:22804 [internal.py:handle_exit():76] Internal process exited
+2025-05-04 14:22:10,272 DEBUG   SystemMonitor:22804 [system_monitor.py:_start():172] Starting system metrics aggregation loop
+2025-05-04 14:22:10,272 DEBUG   SystemMonitor:22804 [system_monitor.py:_start():179] Finished system metrics aggregation loop
+2025-05-04 14:22:10,272 DEBUG   SystemMonitor:22804 [system_monitor.py:_start():183] Publishing last batch of metrics
+2025-05-04 14:22:10,273 DEBUG   SenderThread:22804 [sender.py:send():380] send: stats
