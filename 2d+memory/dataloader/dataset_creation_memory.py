@@ -119,8 +119,8 @@ class KeypointDataset(Dataset):
             img, gaussian_map, keypoint = apply_transform(img, gaussian_map, keypoint, version=self.transform)
             # gaussian_map, _ = apply_transform(gaussian_map, keypoint, version=self.transform)
         
-        visualize_image(img[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist()), tuple(keypoint[2].tolist())])
-        visualize_image(gaussian_map[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist()), tuple(keypoint[2].tolist())])
+        # visualize_image(img[0, 0].cpu().numpy())
+        # visualize_image(gaussian_map[0, 0].cpu().numpy(), points=[tuple(keypoint[0].tolist()), tuple(keypoint[1].tolist()), tuple(keypoint[2].tolist())])
 
         input = torch.cat((img, gaussian_map), dim=1)
 

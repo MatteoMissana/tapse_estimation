@@ -112,7 +112,7 @@ def preprocess_images(images_array, model_type="EchoCoder", device='cpu'):
     if model_type == "U-Net":
         # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
         images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
-        images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)       
+        # images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)       
     elif model_type == "improved_unet":
         images_tensor = torch.tensor(images_array)
     return images_tensor

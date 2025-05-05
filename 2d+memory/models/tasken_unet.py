@@ -75,7 +75,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
 
         self.num_classes = num_classes
-        self.in_channels = 2  # since grayscale
+        self.in_channels = 3  # since grayscale
         self.start_filts = start_filts
         self.depth = depth
 
