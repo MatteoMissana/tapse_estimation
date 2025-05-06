@@ -107,14 +107,19 @@ def preprocess_images(images_array, model_type="EchoCoder", device='cpu'):
     if images_array.max() > 1:
         images_array = images_array.astype(np.float32)/255.0
 
+    # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
+    images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
 
     # Modifichiamo il formato in base al modello
-    if model_type == "U-Net":
-        # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
-        images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
-        # images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)       
-    elif model_type == "improved_unet":
-        images_tensor = torch.tensor(images_array)
+    if model_type == "EchoCoder":
+        images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
+    elif model_type == "EchoCoder Old":
+        images_tensor = images_tensor.unsqueeze(1)  # Shape diventa (N, 1, 1, 256, 256)
+    elif model_type == "EchoCoder 2D+t":
+        images_tensor = images_tensor.repeat(1, 64, 1, 1)  # Shape diventa (N, 64, 256, 256)
+    elif model_type == "U-Net":
+        images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
+
     return images_tensor
 
 # def preprocess_images_with_augmentations(images_array, model_type="EchoCoder", device='cpu'):
@@ -245,7 +250,6 @@ def apply_lut(array):
     return array
 
 
-
 def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
     """
     Resizes or crops a batch of images and updates corresponding keypoints.
@@ -312,127 +316,63 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
         
     return new_imgs, new_keypoints
 
-def resize_or_crop_image_np_nokeypoints(imgs, target_size=(256, 256)):
-    """
-    Resizes or crops a batch of images and updates corresponding keypoints.
-    
-    Args:
-        imgs (np.ndarray): Array di shape (N, H, W) contenente N immagini in scala di grigi.
-        keypoints (np.ndarray): Array di shape (N, K, 2) con le coordinate dei keypoints.
-        target_size (tuple): Dimensione target (H, W).
-
-    Returns:
-        np.ndarray: Batch di immagini ridimensionate/croppate.
-        np.ndarray: Keypoints aggiornati.
-    """
-    N, H, W = imgs.shape  # Numero di immagini e dimensioni originali
-    new_imgs = np.zeros((N, target_size[0], target_size[1]), dtype=imgs.dtype)
-    
-    for i in range(N):
-        img = imgs[i]
-        
-        h, w = img.shape
-        
-        # Se l'immagine è più grande, la crop
-        if h > target_size[0] and w > target_size[1]:
-            crop_h = (h - target_size[0]) // 2
-            crop_w = (w - target_size[1]) // 2
-            img = img[crop_h:crop_h + target_size[0], crop_w:crop_w + target_size[1]]
-
-        # Se l'immagine è più alta che larga, crop + padding
-        elif h > target_size[0] and w < target_size[1]:
-            crop_h = (h - target_size[0]) // 2
-            pad_w1 = (target_size[1] - w) // 2
-            pad_w2 = target_size[1] - w - pad_w1
-            img = img[crop_h:crop_h + target_size[0], :]
-            img = np.pad(img, ((0, 0), (pad_w1, pad_w2)), mode='constant', constant_values=0)
-
-        # Se è più larga che alta, padding + crop
-        elif h < target_size[0] and w > target_size[1]:
-            pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1
-            crop_w = (w - target_size[1]) // 2
-            img = img[:, crop_w:crop_w + target_size[1]]
-            img = np.pad(img, ((pad_h1, pad_h2), (0, 0)), mode='constant', constant_values=0)
-
-        # Se l'immagine è più piccola, padding simmetrico
-        else:
-            pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1  # Bilancia l'eventuale pixel extra
-            pad_w1 = (target_size[1] - w) // 2
-            pad_w2 = target_size[1] - w - pad_w1
-            img = np.pad(img, ((pad_h1, pad_h2), (pad_w1, pad_w2)), mode='constant', constant_values=0)
-        
-        new_imgs[i] = img
-        
-    return new_imgs
-
-
-
 def resize_or_crop_image_torch(imgs, keypoints, target_size=(256, 256)):
     """
-    Ridimensiona o croppa un batch di immagini torch e aggiorna i keypoints corrispondenti.
+    Resize or crop a batch of grayscale images (same original size) and update a shared set of keypoints accordingly.
     
     Args:
-        imgs (torch.Tensor): Tensore di shape (N, H, W) contenente N immagini in scala di grigi.
-        keypoints (torch.Tensor): Tensore di shape (N, K, 2) con le coordinate dei keypoints.
-        target_size (tuple): Dimensione target (H, W).
+        imgs (torch.Tensor): Tensor of shape (N, H, W) with grayscale images.
+        keypoints (torch.Tensor): Tensor of shape (3, 2) with shared keypoints (x, y) format.
+        target_size (tuple): Target (H, W) size.
 
     Returns:
-        torch.Tensor: Batch di immagini ridimensionate/croppate.
-        torch.Tensor: Keypoints aggiornati.
+        torch.Tensor: Transformed images of shape (N, target_H, target_W).
+        torch.Tensor: Adjusted keypoints of shape (3, 2).
     """
     N, H, W = imgs.shape
-    new_imgs = torch.zeros((N, target_size[0], target_size[1]), dtype=imgs.dtype, device=imgs.device)
-    new_keypoints = keypoints.clone()
+    target_H, target_W = target_size
+    new_imgs = torch.zeros((N, target_H, target_W), dtype=imgs.dtype, device=imgs.device)
+    kp = keypoints.clone()
 
-    for i in range(N):
-        img = imgs[i]
-        kp = keypoints[i].clone()
-        
-        h, w = img.shape
+    # Assume all images have the same shape, so calculate transformation once
+    if H > target_H and W > target_W:
+        crop_h = (H - target_H) // 2
+        crop_w = (W - target_W) // 2
+        imgs = imgs[:, crop_h:crop_h + target_H, crop_w:crop_w + target_W]
+        kp[:, 0] -= crop_w
+        kp[:, 1] -= crop_h
 
-        if h > target_size[0] and w > target_size[1]:
-            crop_h = (h - target_size[0]) // 2
-            crop_w = (w - target_size[1]) // 2
-            img = img[crop_h:crop_h + target_size[0], crop_w:crop_w + target_size[1]]
-            kp[:, 0] -= crop_w
-            kp[:, 1] -= crop_h
+    elif H > target_H and W < target_W:
+        crop_h = (H - target_H) // 2
+        pad_w1 = (target_W - W) // 2
+        pad_w2 = target_W - W - pad_w1
+        imgs = imgs[:, crop_h:crop_h + target_H, :]
+        pad = nn.ConstantPad2d((pad_w1, pad_w2, 0, 0), 0)
+        imgs = pad(imgs)
+        kp[:, 1] -= crop_h
+        kp[:, 0] += pad_w1
 
-        elif h > target_size[0] and w < target_size[1]:
-            crop_h = (h - target_size[0]) // 2
-            pad_w1 = (target_size[1] - w) // 2
-            pad_w2 = target_size[1] - w - pad_w1
-            img = img[crop_h:crop_h + target_size[0], :]
-            pad = nn.ConstantPad2d((pad_w1, pad_w2, 0, 0), 0)
-            img = pad(img)
-            kp[:, 1] -= crop_h
-            kp[:, 0] += pad_w1
+    elif H < target_H and W > target_W:
+        pad_h1 = (target_H - H) // 2
+        pad_h2 = target_H - H - pad_h1
+        crop_w = (W - target_W) // 2
+        imgs = imgs[:, :, crop_w:crop_w + target_W]
+        pad = nn.ConstantPad2d((0, 0, pad_h1, pad_h2), 0)
+        imgs = pad(imgs)
+        kp[:, 0] -= crop_w
+        kp[:, 1] += pad_h1
 
-        elif h < target_size[0] and w > target_size[1]:
-            pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1
-            crop_w = (w - target_size[1]) // 2
-            img = img[:, crop_w:crop_w + target_size[1]]
-            pad = nn.ConstantPad2d((0, 0, pad_h1, pad_h2), 0)
-            img = pad(img)
-            kp[:, 0] -= crop_w
-            kp[:, 1] += pad_h1
+    else:
+        pad_h1 = (target_H - H) // 2
+        pad_h2 = target_H - H - pad_h1
+        pad_w1 = (target_W - W) // 2
+        pad_w2 = target_W - W - pad_w1
+        pad = nn.ConstantPad2d((pad_w1, pad_w2, pad_h1, pad_h2), 0)
+        imgs = pad(imgs)
+        kp[:, 0] += pad_w1
+        kp[:, 1] += pad_h1
 
-        else:
-            pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1
-            pad_w1 = (target_size[1] - w) // 2
-            pad_w2 = target_size[1] - w - pad_w1
-            pad = nn.ConstantPad2d((pad_w1, pad_w2, pad_h1, pad_h2), 0)
-            img = pad(img)
-            kp[:, 0] += pad_w1
-            kp[:, 1] += pad_h1
-
-        new_imgs[i] = img
-        new_keypoints[i] = kp
-
-    return new_imgs, new_keypoints
+    return imgs, kp
 
 
 if __name__ == "__main__":

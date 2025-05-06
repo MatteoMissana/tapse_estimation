@@ -25,24 +25,23 @@ class RandomClipDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx):
-        video = self.videos[idx]  # Shape: (T, C, H, W)
+        video = self.videos[idx]  # Shape: (256, 256, T)
         T = video.shape[2]
 
         if T < self.clip_length:
             raise ValueError(f"Video too short: {T} < {self.clip_length}")
 
         # Scegli inizio clip casuale
-        start = random.randint(0, T - self.clip_length)
+        start = random.randint(0, T - self.clip_length-1)
         end = start + self.clip_length
 
-        clip = video[:, :, start:end]  # Shape: (clip_length, C, H, W)
+        clip = video[:, :, start:end] 
 
-        keypoints = self.keypoints[idx][start:end]
-        
+        keypoints = self.keypoints[idx][end] # Shape: (clip_length, num_points, 2)
 
         clip = clip.permute(2,0,1)
         
-        if clip.shape[1] != 256 or clip.shape[2] != 256:
+        if clip.shape[1] or clip.shape[2] != 256:
             clip, keypoints = resize_or_crop_image_torch(clip, keypoints, target_size=(256, 256))
 
         if self.transform:
@@ -89,13 +88,16 @@ class ValidationClipDataset(Dataset):
 
         clip = video[:, :, start:end]  # Shape: (C, H, W, clip_length)
 
-        
+        keypts = keypts[end-1]  # Shape: (clip_length, N, 2)     
 
         clip = clip.permute(2,0,1)  # To (clip_length, C, H, W)
 
         if clip.shape[1] != 256 or clip.shape[2] != 256:
-            clip, keypts = resize_or_crop_image_torch(clip, keypts[start:end], target_size=(256, 256))
+            clip, keypts = resize_or_crop_image_torch(clip, keypts, target_size=(256, 256))
         
+        if self.transform:
+            clip, keypts = apply_transform(clip, keypts, version=self.transform)
+
         clip = clip.unsqueeze(0)  # Shape: (1, clip_length, C, H, W)
 
         clip = clip - clip.min()
@@ -104,73 +106,7 @@ class ValidationClipDataset(Dataset):
         return clip, keypts
     
 
-class RandomClipDataset_gaussian_map(Dataset):
-    def __init__(self, videos, keypoints, clip_length=64, transform=None, sigma = 5):
-        """
-        videos: list of videos, where each video is a tensor of shape (T, C, H, W)
-        clip_length: number of frames per clip (e.g., 64)
-        transform: optional transform applied to each clip
-        """
-        self.videos = videos
-        self.keypoints = keypoints
-        self.clip_length = clip_length
-        self.transform = transform
-        self.sigma = sigma
-
-    def __len__(self):
-        return len(self.videos)
-
-    def __getitem__(self, idx):
-        video = self.videos[idx]  # Shape: (T, C, H, W)
-        T = video.shape[2]
-
-        if T < self.clip_length:
-            raise ValueError(f"Video too short: {T} < {self.clip_length}")
-
-        # Scegli inizio clip casuale
-        start = random.randint(0, T - self.clip_length)
-        end = start + self.clip_length
-
-        clip = video[:, :, start:end]  # Shape: (clip_length, C, H, W)
-
-        keypoints = self.keypoints[idx][start:end]
-
-        clip = clip.permute(2,0,1)
-
-        if clip.shape[1] != 256 or clip.shape[2] != 256:
-            clip, keypoints = resize_or_crop_image_torch(clip, keypoints, target_size=(256, 256))
-
-        
-        if clip.max() > 1:
-            clip = clip / 255.0
-
-        if self.transform:
-            clip, keypoints = apply_transform(clip, keypoints, version=self.transform)
-        clip = clip.unsqueeze(0)  # Shape: (1, 1, clip_length, H, W)
-
-        old_keyp = keypoints.clone()
-
-        C, T, H, W = 3, 64, 256, 256
-        
-        # Create meshgrid (H, W, 2)
-        y = torch.arange(H, dtype=torch.float32, device = keypoints.device).view(H, 1).expand(H, W)
-        x = torch.arange(W, dtype=torch.float32, device = keypoints.device).view(1, W).expand(H, W)
-        grid = torch.stack((x, y), dim=-1)  # shape: (H, W, 2)
-
-        # Reshape for broadcasting
-        grid = grid.view(1, 1, H, W, 2)           # (1, 1, H, W, 2)
-        keypoints = torch.transpose(keypoints, 1,0)      # (C, T, 1, 1, 2)
-        keypoints = keypoints.unsqueeze(2).unsqueeze(2)
-
-
-        # Compute squared distance: (x - cx)^2 + (y - cy)^2
-        squared_dist = ((grid - keypoints) ** 2).sum(dim=-1)  # (1, C, T, H, W)
-
-        # Apply Gaussian
-        gaussians = torch.exp(-squared_dist / (2 * self.sigma**2)) # (1, C, T, H, W)
-
-        return clip, gaussians
-    
+   
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     txt_path = r'c:\Users\vcxr10\Desktop\dataset_division_by_patient.txt'  # Path to the dataset division text file
@@ -199,7 +135,7 @@ if __name__ == "__main__":
                     if frames.shape[2] > 64:
                         videos.append(torch.tensor(frames, dtype=torch.float32).to(device))
                         keypoints.append(torch.tensor(annotations, dtype=torch.float32).to(device))
-    dataset = RandomClipDataset(videos, keypoints, clip_length=64)
+    dataset = RandomClipDataset(videos, keypoints, clip_length=10)
     print(f"Number of clips: {len(dataset)}")
     print(f"Clip shape: {dataset[0][0].shape}")
     print(f"Keypoint shape: {dataset[0][1].shape}")

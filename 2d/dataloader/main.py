@@ -65,6 +65,9 @@ class KeypointDataset(Dataset):
         if self.transform:
             img, keypoint = apply_transform(img, keypoint, version=self.transform)
 
+        img = img - img.min()
+        img = img / img.max()
+
         return img, keypoint
 
 

@@ -110,7 +110,7 @@ def predict_indices(model, test_path):
         coordinates_2 = center_of_mass(output[0, 1].detach())
         coordinates_3 = center_of_mass(output[0, 2].detach())
 
-        visualize_image(im[0, 0,0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())])
+        # visualize_image(im[0, 0,0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())])
 
         # Calculate distance between tricuspid valve and apex
         apex_dist, diameter = tric_apex_distance_calculation(coordinates_1, coordinates_2, coordinates_3)
