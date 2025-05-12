@@ -66,7 +66,7 @@ g.manual_seed(args.seed)
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None):
     model.train()
     early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path, delta=0.01)
-    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=3, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
+    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=15, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
@@ -291,7 +291,7 @@ def main():
     print(f"Number of test videos: {len(videos_test)}")
 
 
-    train_dataset = ValidationClipDataset(videos, keypoints, clip_length=args.clip_length, transform = args.augm_version)
+    train_dataset = RandomClipDataset(videos, keypoints, clip_length=args.clip_length, transform = args.augm_version)
     val_dataset = ValidationClipDataset(videos_val, keypoints_val, clip_length=args.clip_length)
     
 
