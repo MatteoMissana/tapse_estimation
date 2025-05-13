@@ -54,11 +54,14 @@ def predict_indices(model, test_path):
         ecg = f['ecg']['ecg_data'][()]
         ecg_times = f['ecg']['ecg_times'][()]
         # f.visititems(print_attrs)
-        dirx = f['tissue']['dirx'][()]
         pixelsize = f['tissue']['pixelsize'][()]
 
         # Compute sampling frequency of ECG
         fs = 1 / (ecg_times[1] - ecg_times[0])
+
+        #compute sampling frequency of images
+        fs_images = 1 / (images_times[1] - images_times[0])
+        dt = images_times[1] - images_times[0]
 
         # Reorder image dimensions: (frames, height, width) → (height, width, frames)
         images = images.transpose(1, 0, 2)
@@ -97,13 +100,6 @@ def predict_indices(model, test_path):
     # if beat_start[-1] == len(images):
     #     beat_start.pop(-1) #remove if the beat start is the last value (could be a local maximum)
     # beat_start.pop(-1) #remove another r peak (so that the last heartbeat will be complete since I take all the values after each r peak) 
-        
-    kalman_filter = KalmanFilter(
-                process_variance=0.05,
-                measurement_variance=5e-2,
-                initial_estimate=0,
-                initial_error=10
-            )
 
     flag_first = True
     coordinates_array = np.zeros((len(images), 3, 2))
@@ -115,112 +111,123 @@ def predict_indices(model, test_path):
         im = im.float().unsqueeze(0).to(device)
         im = im.repeat(1, 1, 3, 1, 1)
 
-        # Run segmentation model
+        # Run deteciton model
         output = model(im)
 
-        # Extract coordinates of segmented structures via center of mass
+        # Extract coordinates of segmented structures via center of mass method
         coordinates_1 = center_of_mass(output[0, 0].detach())
         coordinates_2 = center_of_mass(output[0, 1].detach())
         coordinates_3 = center_of_mass(output[0, 2].detach())
 
-        visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
+        # visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
 
         coordinates_array[i, 0] = coordinates_1
         coordinates_array[i, 1] = coordinates_2
         coordinates_array[i, 2] = coordinates_3
 
-        # Calculate distance between tricuspid valve and apex
-        apex_dist, diameter = tric_apex_distance_calculation(coordinates_1, coordinates_2, coordinates_3, pixelsize)
+    # plt.figure(figsize=(6, 6))
+    # plt.scatter(coordinates_array[:,0,0], coordinates_array[:,0,1], color='blue', label='free_wall')
+    # plt.scatter(coordinates_array[:,1,0], coordinates_array[:,1,1], color='red', label='septum')
+    # plt.xlabel('X')
+    # plt.ylabel('Y')
+    # plt.title('Punti 2D')
+    # plt.grid(True)
+    # plt.axis('equal')
+    # plt.legend()
+    # plt.show()
 
+    #filter the coordinates to remove noise
+    kf1 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
+    kf2 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
+    kf3 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
 
-        if flag_first:
-            kalman_filter.initial_estimate = apex_dist
-            kalman_diameter = KalmanFilter(
-                process_variance=2e-3,
-                measurement_variance=1e-3,
-                initial_estimate=diameter,
-                initial_error=5e-4
-            )
+    # print(dt)
+    #initialize the position
+    kf1.x = np.matrix([coordinates_array[0, 0, 0], coordinates_array[0, 0, 1], 0, 0]).T
+    kf2.x = np.matrix([coordinates_array[0, 1, 0], coordinates_array[0, 1, 1], 0, 0]).T
+    kf3.x = np.matrix([coordinates_array[0, 2, 0], coordinates_array[0, 2, 1], 0, 0]).T
 
-            annulus_direction = np.array([coordinates_1[0] - coordinates_2[0], coordinates_1[1] - coordinates_2[1]])
-            annulus_direction = annulus_direction / np.linalg.norm(annulus_direction)
+    filtered_array = np.zeros_like(coordinates_array)
+    # coordinates_array[10] = np.ones_like(coordinates_array[10])*300
+    for i, predicted_coordinates in enumerate(coordinates_array):
+        kf1.predict()
+        kf2.predict()
+        kf3.predict()
 
-            tapse_direction = np.array([-annulus_direction[1], annulus_direction[0]])
-            tapse_direction /= np.linalg.norm(tapse_direction)
+        filt1 = kf1.update(np.matrix(predicted_coordinates[0]).T)  # Correct with measurement
+        filt2 = kf2.update(np.matrix(predicted_coordinates[1]).T)  # Correct with measurement
+        filt3 = kf3.update(np.matrix(predicted_coordinates[2]).T)  # Correct with measurement
 
-            flag_first = False
+        filtered_array[i, 0] = filt1.A1  # or filt1.flatten()
+        filtered_array[i, 1] = filt2.A1
+        filtered_array[i, 2] = filt3.A1
+        # print(f'predicted_coordinates {i}', predicted_coordinates)
+        # print(f"filtered_array {i}", filtered_array[i])
 
-        # Apply Kalman filter for temporal smoothing
-        filtered_distance = kalman_filter.update(apex_dist)
-        filtered_diameter = kalman_diameter.update(diameter)
+    filtered_array[:,:,0] = filtered_array[:,:,0] * pixelsize[0]
+    filtered_array[:,:,1] = filtered_array[:,:,1] * pixelsize[1]
 
-        apex_distances.append(apex_dist)
-        filtered_distances.append(filtered_distance)
-        diameters.append(diameter)
-        filtered_diameters.append(filtered_diameter)
+    
 
-    plt.figure(figsize=(6, 6))
-    plt.scatter(coordinates_array[:,0,0], coordinates_array[:,0,1], color='blue', label='free_wall')
-    plt.scatter(coordinates_array[:,1,0], coordinates_array[:,1,1], color='red', label='septum')
-    plt.xlabel('X')
-    plt.ylabel('Y')
-    plt.title('Punti 2D')
-    plt.grid(True)
-    plt.axis('equal')
-    plt.legend()
-    plt.show()
+    for j in range(3):  # for each of the 3 points
+        plt.plot(coordinates_array[:, j, 0], coordinates_array[:, j, 1], 'r', label=f'Original {j+1}' if j==0 else "")
+        plt.plot(filtered_array[:, j, 0], filtered_array[:, j, 1], 'g', label=f'Filtered {j+1}' if j==0 else "")
 
-    # Convert lists to numpy arrays
-    filtered_array = np.array(filtered_distances)
-    filtered_diameters_array = np.array(filtered_diameters)
+    # plt.legend()
+    # plt.xlabel("X")
+    # plt.ylabel("Y")
+    # plt.title("Original vs Filtered Coordinates (2D)")
+    # plt.grid(True)
+    # plt.show()
 
     direction_free_wall = find_parallel_direction(coordinates_array[:, 0]) # direction parallel to thew movement of the free wall
     direction_septum = find_parallel_direction(coordinates_array[:, 1]) # direction parallel to thew movement of the septum
 
-
-
     average_direction = direction_free_wall + direction_septum
     average_direction /= np.linalg.norm(average_direction)
-
-    # calculate tapse
-    tapse = tapse_calculation(coordinates_fw=coordinates_array[:, 0], coordinates_septum=coordinates_array[:, 1], direction = average_direction, pixelsize = pixelsize)
-
-    # Optional plot for visual inspection (currently commented out)
-    plt.figure(figsize=(12, 6))
-    plt.plot(apex_distances, label="Raw Distance", linestyle='--', marker='o')
-    plt.plot(filtered_distances, label="Filtered Distance", linestyle='-', marker='x')
-    plt.xlabel("Frame Index")
-    plt.ylabel("Distance")
-    plt.title("Tricuspid-Apex Distance Over Time")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
 
     rvlsf = []
 
     # Compute RVLSF for each heartbeat segment
     max_diameters = []
     min_diameters = []
+    tapse_list = []
     for i in range(len(beat_start)-1):
         window = filtered_array[beat_start[i]:beat_start[i+1]]
 
-        diast_distance = window.max()
-        syst_distance = window.min()
+        # Calculate distances and diameters
+        apex_distance, diameter = tric_apex_distance_calculation(window[:,0], window[:,1], window[:,2])
+        max_diameter = diameter.max()   
+        min_diameter = diameter.min() 
+        diast_distance = apex_distance.max()
+        syst_distance = apex_distance.min()
 
-        min_diameter = filtered_diameters_array[beat_start[i]:beat_start[i+1]].min()
-        max_diameter = filtered_diameters_array[beat_start[i]:beat_start[i+1]].max()
+        # calculate tapse
+        tapse = tapse_calculation(coordinates_fw=window[:, 0], coordinates_septum=window[:, 1], direction = average_direction)
 
-        # RVLSF is the relative shortening between diastole and systole
+        # # Optional plot for visual inspection (currently commented out)
+        # plt.figure(figsize=(12, 6))
+        # plt.plot(apex_distance, label="Raw Distance", linestyle='--', marker='o')
+        # plt.xlabel("Frame Index")
+        # plt.ylabel("Distance")
+        # plt.title("Tricuspid-Apex Distance Over Time")
+        # plt.legend()
+        # plt.grid(True)
+        # plt.tight_layout()
+        # plt.show()
+
+        # create arrays to average the measurement for all the heartbeats
         rvlsf.append(((diast_distance - syst_distance) / diast_distance) * 100)
         max_diameters.append(max_diameter)
         min_diameters.append(min_diameter)
+        tapse_list.append(tapse)
 
     rvlsf = np.array(rvlsf)
     max_diameters_array = np.array(max_diameters)
     min_diameters_array = np.array(min_diameters)
+    tapse = np.array(tapse_list)
 
-    return rvlsf.mean(), min_diameters_array.mean(), max_diameters_array.mean(), tapse # Return mean RVLSF across all cycles
+    return rvlsf.mean(), min_diameters_array.mean(), max_diameters_array.mean(), tapse.mean() # Return mean RVLSF across all cycles
 
 # Entry point to execute the function and print the result
 if __name__ == "__main__":

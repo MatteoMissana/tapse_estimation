@@ -3,25 +3,27 @@ import numpy as np
 import torch
 from numpy.polynomial import polynomial as poly
 
-def tric_apex_distance_calculation(free_wall, septum, apex, pixelsize):
-    middle = (free_wall + septum)/2
+def tric_apex_distance_calculation(free_wall, septum, apex):
 
-    dist_0 = torch.linalg.vector_norm(free_wall - apex, ord=2)
-    dist_1 = torch.linalg.vector_norm(septum - apex, ord=2)
-    dist_2 = torch.linalg.vector_norm(middle - apex, ord=2)
+    # middle point (no scaling here, as in original)
+    middle = (free_wall + septum) / 2
 
-    diameter = torch.linalg.vector_norm(free_wall - septum, ord=2)
+    # Compute distances (Euclidean norm, along last axis)
+    dist_0 = np.linalg.norm(free_wall - apex, ord=2, axis=-1)
+    dist_1 = np.linalg.norm(septum - apex, ord=2, axis=-1)
+    dist_2 = np.linalg.norm(middle - apex, ord=2, axis=-1)
+    diameter = np.linalg.norm(free_wall - septum, ord=2, axis=-1)
 
+    # Average distance
     dist = (dist_0 + dist_1 + dist_2) / 3
-    dist = dist.cpu().numpy()
-    diameter = diameter.cpu().numpy() * pixelsize[0] #TODO: change this to adapt to the case where pixelsize has 2 different values
+
     return dist, diameter
+
 
 def tapse_calculation(
     coordinates_septum: np.ndarray,
     coordinates_fw: np.ndarray,
     direction: np.ndarray,
-    pixelsize: list,
 ):
     """
     Calculate TAPSE (Tricuspid Annular Plane Systolic Excursion) from the coordinates of the septum and free wall.
@@ -30,13 +32,12 @@ def tapse_calculation(
     """
 
     projection_septum = coordinates_septum @ direction
-    print("projection_septum", projection_septum)
     projection_fw = coordinates_fw @ direction
     tapse_septum = projection_septum.max() - projection_septum.min()
     tapse_fw = projection_fw.max() - projection_fw.min()
     tapse = (tapse_septum + tapse_fw) / 2
 
-    return tapse * pixelsize[0] #TODO: change this to adapt to the case where pixelsize has 2 different values
+    return tapse
 
 def find_parallel_direction(points):
     """
