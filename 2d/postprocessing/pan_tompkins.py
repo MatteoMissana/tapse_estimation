@@ -1,6 +1,6 @@
 import numpy as np
-from scipy.signal import butter, lfilter, find_peaks
 import matplotlib.pyplot as plt
+from scipy.signal import butter, lfilter, find_peaks
 
 def bandpass_filter(signal, fs, lowcut=5.0, highcut=15.0, order=1):
     nyq = 0.5 * fs
@@ -24,17 +24,6 @@ def pan_tompkins_detector(ecg_signal: np.ndarray, fs: float, plot=False):
     window_size = int(0.150 * fs)
     mwa = np.convolve(squared, np.ones(window_size)/window_size, mode='same')
 
-    if plot:
-        time = np.arange(len(mwa)) / fs
-        plt.figure(figsize=(12, 4))
-        plt.plot(time, mwa, label='Integrated Signal (Before Thresholding)')
-        plt.title('Moving Window Integration Output')
-        plt.xlabel('Time (s)')
-        plt.ylabel('Amplitude')
-        plt.grid(True)
-        plt.legend()
-        plt.show()
-
     # 5. Peak detection with adaptive thresholding
     distance = int(0.25 * fs)
     threshold = 0.5 * np.max(mwa)
@@ -49,4 +38,18 @@ def pan_tompkins_detector(ecg_signal: np.ndarray, fs: float, plot=False):
         r_peaks.append(start + local_max)
 
     r_peaks = np.array(r_peaks)
+
+    if plot:
+        time = np.arange(len(ecg_signal)) / fs
+        plt.figure(figsize=(12, 4))
+        plt.plot(time, ecg_signal, label='Original ECG')
+        plt.plot(time[r_peaks], ecg_signal[r_peaks], 'ro', label='Detected R Peaks')
+        plt.title('ECG Signal with Detected R Peaks')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+
     return r_peaks

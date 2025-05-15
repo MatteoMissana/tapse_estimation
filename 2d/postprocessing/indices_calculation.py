@@ -4,21 +4,58 @@ import torch
 from numpy.polynomial import polynomial as poly
 
 def tric_apex_distance_calculation(free_wall, septum, apex):
+    """
+    Calculate the distance from the apex to the free wall and septum.
+    also calculates the diameter of the right ventricle, and the area of the triangle defined by those three points.
+    the output arrays are of the same lenght as the input, with the measure calculated for each time interval"""
 
-    # middle point (no scaling here, as in original)
-    middle = (free_wall + septum) / 2
+    midpoint = (free_wall + septum) / 2
 
     # Compute distances (Euclidean norm, along last axis)
     dist_0 = np.linalg.norm(free_wall - apex, ord=2, axis=-1)
     dist_1 = np.linalg.norm(septum - apex, ord=2, axis=-1)
-    dist_2 = np.linalg.norm(middle - apex, ord=2, axis=-1)
+    dist_2 = np.linalg.norm(midpoint - apex, ord=2, axis=-1)
+
+
     diameter = np.linalg.norm(free_wall - septum, ord=2, axis=-1)
 
-    # Average distance
-    dist = (dist_0 + dist_1 + dist_2) / 3
+    semiperimeter = (dist_0 + dist_1 + diameter) / 2
+    # Area using Heron's formula
+    area = np.sqrt(
+        semiperimeter
+        * (semiperimeter - dist_0)
+        * (semiperimeter - dist_1)
+        * (semiperimeter - diameter)
+    )
 
-    return dist, diameter
+    diast_area = area.max()
+    syst_area = area.min()
 
+    # calculate rvfac surrogate
+    rvfac = (diast_area - syst_area) / diast_area * 100
+
+
+
+    
+
+    rvldfw = dist_0.max()
+    rvldsep = dist_1.max()
+    rvlsfw = dist_0.min()
+    rvlssep = dist_1.min()
+    rvldmid = dist_2.max()
+    rvlsmid = dist_2.min()
+
+    rvlsffw = (rvldfw - rvlsfw)/ rvldfw * 100
+    rvlsfsep = (rvldsep - rvlssep)/ rvldsep * 100
+    rvlsfmid = (rvldmid - rvlsmid)/ rvldmid * 100
+    rvlsfglobal = ((rvldfw+rvldsep)-(rvlsfw+rvlssep))/(rvldfw+rvldsep) * 100
+
+    tadd = diameter.max() 
+    tasd = diameter.min()
+
+
+
+    return rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep, rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal
 
 def tapse_calculation(
     coordinates_septum: np.ndarray,
@@ -37,7 +74,7 @@ def tapse_calculation(
     tapse_fw = projection_fw.max() - projection_fw.min()
     tapse = (tapse_septum + tapse_fw) / 2
 
-    return tapse
+    return tapse_septum, tapse_fw, tapse
 
 def find_parallel_direction(points):
     """

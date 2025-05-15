@@ -3,6 +3,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 import h5py
+import pandas as pd
+import os
 
 # Import custom preprocessing, model, and postprocessing utilities
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
@@ -20,20 +22,7 @@ def print_attrs(name, obj):
     for key, val in obj.attrs.items():
         print(f"  Attr: {key} => {val}")
 
-
-
-# Path to test data and trained model
-test_path = r'D:\mmissana\data/RV_PATIENTS/RV_patients_annotated/_794029/P429K79A.h5'
-model_checkpoint = r'D:\mmissana\runs\unet_augm7_gaussian_curve_training\best_model.pth'
-
-# Set device to GPU if available
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-# Initialize and load the trained U-Net model
-model = UNet(num_classes=3, depth=6, start_filts=8, in_channels=3).to(device)
-model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
-
-def predict_indices(model, test_path):
+def predict_indices(model, test_path, filter = False):
     """
     Predicts the RVLSF index from a cardiac sequence using a trained segmentation model.
     
@@ -50,6 +39,7 @@ def predict_indices(model, test_path):
     # Load image and ECG data from HDF5 file
     with h5py.File(test_path, 'r') as f:
         images = f['tissue']['data'][()]
+        print(f"Images shape: {images.shape}")
         images_times = f['tissue']['times'][()]
         ecg = f['ecg']['ecg_data'][()]
         ecg_times = f['ecg']['ecg_times'][()]
@@ -59,8 +49,7 @@ def predict_indices(model, test_path):
         # Compute sampling frequency of ECG
         fs = 1 / (ecg_times[1] - ecg_times[0])
 
-        #compute sampling frequency of images
-        fs_images = 1 / (images_times[1] - images_times[0])
+        # Compute sampling frequency of images
         dt = images_times[1] - images_times[0]
 
         # Reorder image dimensions: (frames, height, width) → (height, width, frames)
@@ -78,11 +67,6 @@ def predict_indices(model, test_path):
     if images.max() > 1:
         images = images / 255.0
 
-    apex_distances = []
-    filtered_distances = []
-    diameters = []
-    filtered_diameters = []
-
     # Detect R-peaks in ECG using Pan-Tompkins algorithm
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
     print(f"R-peaks detected at indices: {r_peaks}")
@@ -94,14 +78,9 @@ def predict_indices(model, test_path):
         closest_index = np.argmin(time_diff)
         beat_start.append(closest_index)
 
-    #TODO: identify whole heartbeats
-    # if beat_start[0] == 0:
-    #     beat_start.pop(0) #remove if the beat start is the first value (could be a local maximum)
-    # if beat_start[-1] == len(images):
-    #     beat_start.pop(-1) #remove if the beat start is the last value (could be a local maximum)
-    # beat_start.pop(-1) #remove another r peak (so that the last heartbeat will be complete since I take all the values after each r peak) 
+    print(f"Beat start indices: {beat_start}")
 
-    flag_first = True
+
     coordinates_array = np.zeros((len(images), 3, 2))
 
     for i, im in enumerate(images):
@@ -111,7 +90,7 @@ def predict_indices(model, test_path):
         im = im.float().unsqueeze(0).to(device)
         im = im.repeat(1, 1, 3, 1, 1)
 
-        # Run deteciton model
+        # Run detection model
         output = model(im)
 
         # Extract coordinates of segmented structures via center of mass method
@@ -125,53 +104,53 @@ def predict_indices(model, test_path):
         coordinates_array[i, 1] = coordinates_2
         coordinates_array[i, 2] = coordinates_3
 
+    # Plot example
     # plt.figure(figsize=(6, 6))
     # plt.scatter(coordinates_array[:,0,0], coordinates_array[:,0,1], color='blue', label='free_wall')
     # plt.scatter(coordinates_array[:,1,0], coordinates_array[:,1,1], color='red', label='septum')
     # plt.xlabel('X')
     # plt.ylabel('Y')
-    # plt.title('Punti 2D')
+    # plt.title('2D Points')
     # plt.grid(True)
     # plt.axis('equal')
     # plt.legend()
     # plt.show()
+    filtered_array = coordinates_array.copy()
+    if filter:
+        # Filter the coordinates to remove noise
+        kf1 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
+        kf2 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
+        kf3 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
 
-    #filter the coordinates to remove noise
-    kf1 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
-    kf2 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
-    kf3 = KalmanFilter(dt=dt, u_x=0, u_y=0, std_acc=5, x_std_meas=.1, y_std_meas=.1)
+        # print(dt)
+        # Initialize the position
+        kf1.x = np.matrix([coordinates_array[0, 0, 0], coordinates_array[0, 0, 1], 0, 0]).T
+        kf2.x = np.matrix([coordinates_array[0, 1, 0], coordinates_array[0, 1, 1], 0, 0]).T
+        kf3.x = np.matrix([coordinates_array[0, 2, 0], coordinates_array[0, 2, 1], 0, 0]).T
 
-    # print(dt)
-    #initialize the position
-    kf1.x = np.matrix([coordinates_array[0, 0, 0], coordinates_array[0, 0, 1], 0, 0]).T
-    kf2.x = np.matrix([coordinates_array[0, 1, 0], coordinates_array[0, 1, 1], 0, 0]).T
-    kf3.x = np.matrix([coordinates_array[0, 2, 0], coordinates_array[0, 2, 1], 0, 0]).T
+        # coordinates_array[10] = np.ones_like(coordinates_array[10])*300
+        for i, predicted_coordinates in enumerate(coordinates_array):
+            kf1.predict()
+            kf2.predict()
+            kf3.predict()
 
-    filtered_array = np.zeros_like(coordinates_array)
-    # coordinates_array[10] = np.ones_like(coordinates_array[10])*300
-    for i, predicted_coordinates in enumerate(coordinates_array):
-        kf1.predict()
-        kf2.predict()
-        kf3.predict()
+            filt1 = kf1.update(np.matrix(predicted_coordinates[0]).T)  # Correct with measurement
+            filt2 = kf2.update(np.matrix(predicted_coordinates[1]).T)  # Correct with measurement
+            filt3 = kf3.update(np.matrix(predicted_coordinates[2]).T)  # Correct with measurement
 
-        filt1 = kf1.update(np.matrix(predicted_coordinates[0]).T)  # Correct with measurement
-        filt2 = kf2.update(np.matrix(predicted_coordinates[1]).T)  # Correct with measurement
-        filt3 = kf3.update(np.matrix(predicted_coordinates[2]).T)  # Correct with measurement
-
-        filtered_array[i, 0] = filt1.A1  # or filt1.flatten()
-        filtered_array[i, 1] = filt2.A1
-        filtered_array[i, 2] = filt3.A1
-        # print(f'predicted_coordinates {i}', predicted_coordinates)
-        # print(f"filtered_array {i}", filtered_array[i])
+            filtered_array[i, 0] = filt1.A1  # or filt1.flatten()
+            filtered_array[i, 1] = filt2.A1
+            filtered_array[i, 2] = filt3.A1
+            # print(f'predicted_coordinates {i}', predicted_coordinates)
+            # print(f"filtered_array {i}", filtered_array[i])
 
     filtered_array[:,:,0] = filtered_array[:,:,0] * pixelsize[0]
     filtered_array[:,:,1] = filtered_array[:,:,1] * pixelsize[1]
 
-    
-
-    for j in range(3):  # for each of the 3 points
-        plt.plot(coordinates_array[:, j, 0], coordinates_array[:, j, 1], 'r', label=f'Original {j+1}' if j==0 else "")
-        plt.plot(filtered_array[:, j, 0], filtered_array[:, j, 1], 'g', label=f'Filtered {j+1}' if j==0 else "")
+    # Plot filtered coordinates
+    # for j in range(3):  # for each of the 3 points
+    #     plt.plot(coordinates_array[:, j, 0], coordinates_array[:, j, 1], 'r', label=f'Original {j+1}' if j==0 else "")
+    #     plt.plot(filtered_array[:, j, 0], filtered_array[:, j, 1], 'g', label=f'Filtered {j+1}' if j==0 else "")
 
     # plt.legend()
     # plt.xlabel("X")
@@ -180,59 +159,90 @@ def predict_indices(model, test_path):
     # plt.grid(True)
     # plt.show()
 
-    direction_free_wall = find_parallel_direction(coordinates_array[:, 0]) # direction parallel to thew movement of the free wall
-    direction_septum = find_parallel_direction(coordinates_array[:, 1]) # direction parallel to thew movement of the septum
+    direction_free_wall = find_parallel_direction(coordinates_array[:, 0])  # direction parallel to the movement of the free wall
+    direction_septum = find_parallel_direction(coordinates_array[:, 1])  # direction parallel to the movement of the septum
 
     average_direction = direction_free_wall + direction_septum
     average_direction /= np.linalg.norm(average_direction)
 
-    rvlsf = []
-
     # Compute RVLSF for each heartbeat segment
-    max_diameters = []
-    min_diameters = []
-    tapse_list = []
+    index_container = np.zeros((len(beat_start)-1, 17))
     for i in range(len(beat_start)-1):
         window = filtered_array[beat_start[i]:beat_start[i+1]]
 
-        # Calculate distances and diameters
-        apex_distance, diameter = tric_apex_distance_calculation(window[:,0], window[:,1], window[:,2])
-        max_diameter = diameter.max()   
-        min_diameter = diameter.min() 
-        diast_distance = apex_distance.max()
-        syst_distance = apex_distance.min()
+        # Calculate distances and diameters and areas
+        rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep, rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal = tric_apex_distance_calculation(window[:,0], window[:,1], window[:,2])
 
-        # calculate tapse
-        tapse = tapse_calculation(coordinates_fw=window[:, 0], coordinates_septum=window[:, 1], direction = average_direction)
+        # Calculate TAPSE
+        tapse_sep, tapse_fw, tapse = tapse_calculation(coordinates_fw=window[:, 0], coordinates_septum=window[:, 1], direction = average_direction)
 
-        # # Optional plot for visual inspection (currently commented out)
-        # plt.figure(figsize=(12, 6))
-        # plt.plot(apex_distance, label="Raw Distance", linestyle='--', marker='o')
-        # plt.xlabel("Frame Index")
-        # plt.ylabel("Distance")
-        # plt.title("Tricuspid-Apex Distance Over Time")
-        # plt.legend()
-        # plt.grid(True)
-        # plt.tight_layout()
-        # plt.show()
+        index_container[i, 0] = tapse_fw*1000  # Convert to mm
+        index_container[i, 1] = tapse_sep*1000  # Convert to mm
+        index_container[i, 2] = rvfac
+        index_container[i, 3] = diast_area*10000  # Convert to cm²
+        index_container[i, 4] = syst_area*10000  # Convert to cm²
+        index_container[i, 5] = rvldfw*1000  # Convert to mm
+        index_container[i, 6] = rvldsep*1000  # Convert to mm
+        index_container[i, 7] = rvlsfw*1000  # Convert to mm
+        index_container[i, 8] = rvlssep*1000  # Convert to mm
+        index_container[i, 9] = tadd*1000  # Convert to mm
+        index_container[i, 10] = tasd*1000  # Convert to mm
+        index_container[i, 11] = rvldmid*1000  # Convert to mm
+        index_container[i, 12] = rvlsmid*1000  # Convert to mm
+        index_container[i, 13] = rvlsffw
+        index_container[i, 14] = rvlsfglobal
+        index_container[i, 15] = rvlsfsep
+        index_container[i, 16] = rvlsfmid
 
-        # create arrays to average the measurement for all the heartbeats
-        rvlsf.append(((diast_distance - syst_distance) / diast_distance) * 100)
-        max_diameters.append(max_diameter)
-        min_diameters.append(min_diameter)
-        tapse_list.append(tapse)
-
-    rvlsf = np.array(rvlsf)
-    max_diameters_array = np.array(max_diameters)
-    min_diameters_array = np.array(min_diameters)
-    tapse = np.array(tapse_list)
-
-    return rvlsf.mean(), min_diameters_array.mean(), max_diameters_array.mean(), tapse.mean() # Return mean RVLSF across all cycles
+    return index_container.mean(axis = 0)  # Return mean RVLSF across all cycles
 
 # Entry point to execute the function and print the result
 if __name__ == "__main__":
-    rvlsf, min_diam, max_diam, tapse= predict_indices(model, test_path)
-    print(f"RVLSF: {rvlsf:.2f}%")
-    print(f"Min Diameter: {min_diam*1000} mm")
-    print(f"Max Diameter: {max_diam*1000} mm")
-    print(f"TAPSE: {tapse*1000} mm")
+    h5_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated'
+    model_checkpoint = r'D:\mmissana\runs\unet_augm7_gaussian_curve_training\best_model.pth'
+    excel_path = r"D:\mmissana\data\RV_PATIENTS\Results_single_frame\UNet.xlsx"
+
+    columns = [
+        "tapsefw", "tapsesep", "rvfac", "rvad", "rvas",
+        "rvldfw", "rvldsep", "rvlsfw", "rvlssep", "tadd",
+        "tasd", "rvldmid", "rvlsmid", "rvlsffw", "rvlsfglobal",
+        "rvlsfsep", "rvlsfmid"
+    ]
+
+    # Load the DataFrame
+    df = pd.read_excel(excel_path)
+
+    # Make sure all columns are present (add them if missing)
+    for col in columns:
+        if col not in df.columns:
+            df[col] = None  # initialize with null values
+
+    # Extract paths
+    if "path" in df.columns:
+        paths = df["path"].dropna().tolist()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    model = UNet(num_classes=3, depth=6, start_filts=8, in_channels=3).to(device)
+    model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
+
+    for path in paths:
+        test_path = os.path.join(h5_path, path + ".h5")
+        print(f"Processing file: {test_path}")
+
+        indexes = predict_indices(model, test_path)
+
+        # Find the row index corresponding to the current path
+        row_idx = df.index[df["path"] == path].tolist()
+        if not row_idx:
+            print(f"Path {path} not found in DataFrame.")
+            continue
+        row = row_idx[0]
+
+        # Write values into the correct row
+        for i, col in enumerate(columns):
+            df.at[row, col] = indexes[i]
+
+    # Save the updated Excel file
+    df.to_excel(excel_path, index=False)
+    print("Excel file successfully updated.")

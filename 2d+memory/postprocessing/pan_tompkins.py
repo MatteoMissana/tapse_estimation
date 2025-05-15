@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.signal import butter, lfilter, find_peaks
 
 def bandpass_filter(signal, fs, lowcut=5.0, highcut=15.0, order=1):
@@ -8,18 +9,7 @@ def bandpass_filter(signal, fs, lowcut=5.0, highcut=15.0, order=1):
     b, a = butter(order, [low, high], btype='band')
     return lfilter(b, a, signal)
 
-def pan_tompkins_detector(ecg_signal: np.ndarray, fs: float):
-    """
-    Implements Pan-Tompkins algorithm to detect R-peaks in an ECG signal.
-    
-    Parameters:
-        ecg_signal (np.ndarray): The ECG signal.
-        fs (float): Sampling frequency in Hz.
-    
-    Returns:
-        r_peaks (np.ndarray): Detected R-peak indices.
-        diastoles (np.ndarray): Approximated diastole indices.
-    """
+def pan_tompkins_detector(ecg_signal: np.ndarray, fs: float, plot=False):
     # 1. Bandpass filter (5–15 Hz)
     filtered = bandpass_filter(ecg_signal, fs, lowcut=5.0, highcut=15.0)
 
@@ -35,19 +25,31 @@ def pan_tompkins_detector(ecg_signal: np.ndarray, fs: float):
     mwa = np.convolve(squared, np.ones(window_size)/window_size, mode='same')
 
     # 5. Peak detection with adaptive thresholding
-    distance = int(0.25 * fs)  # ~240 BPM max
+    distance = int(0.25 * fs)
     threshold = 0.5 * np.max(mwa)
     peaks, _ = find_peaks(mwa, height=threshold, distance=distance)
 
-    # Optional: adjust peak position to actual R-peak in original ECG
     r_peaks = []
-    search_window = int(0.1 * fs)  # +/- 100 ms window
+    search_window = int(0.1 * fs)
     for peak in peaks:
         start = max(peak - search_window, 0)
         end = min(peak + search_window, len(ecg_signal))
         local_max = np.argmax(ecg_signal[start:end])
         r_peaks.append(start + local_max)
-    
+
     r_peaks = np.array(r_peaks)
+
+    if plot:
+        time = np.arange(len(ecg_signal)) / fs
+        plt.figure(figsize=(12, 4))
+        plt.plot(time, ecg_signal, label='Original ECG')
+        plt.plot(time[r_peaks], ecg_signal[r_peaks], 'ro', label='Detected R Peaks')
+        plt.title('ECG Signal with Detected R Peaks')
+        plt.xlabel('Time (s)')
+        plt.ylabel('Amplitude')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
 
     return r_peaks

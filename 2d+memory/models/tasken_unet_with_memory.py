@@ -65,7 +65,7 @@ class UNet(nn.Module):
     (2) merging outputs does not require cropping due to (1)
     """
 
-    def __init__(self, num_classes, depth=5, start_filts=64):
+    def __init__(self, num_classes, depth=5, start_filts=64, in_channels=2):
         """
         Arguments:
             depth: int, number of MaxPools in the U-Net.
@@ -75,7 +75,7 @@ class UNet(nn.Module):
         super(UNet, self).__init__()
 
         self.num_classes = num_classes
-        self.in_channels = 2  # since grayscale
+        self.in_channels = in_channels # since grayscale
         self.start_filts = start_filts
         self.depth = depth
 
