@@ -4,7 +4,7 @@ import random
 import os
 import h5py
 import numpy as np
-from augmentations.augm_3d import apply_transform
+from augmentations.augm_3d import apply_transform, apply_transform_val
 from utils.plot import visualize_image, VolumeViewer
 from dataloader.preprocessing import resize_or_crop_image_torch
 
@@ -25,6 +25,8 @@ class RandomClipDataset(Dataset):
         return len(self.videos)
 
     def __getitem__(self, idx):
+        print(self.videos[idx].shape)
+        print(self.keypoints[idx].shape)
         video = self.videos[idx]  # Shape: (T, C, H, W)
         T = video.shape[2]
 
@@ -32,7 +34,7 @@ class RandomClipDataset(Dataset):
             raise ValueError(f"Video too short: {T} < {self.clip_length}")
 
         # Scegli inizio clip casuale
-        start = random.randint(0, T - self.clip_length)
+        start = random.randint(0, T - self.clip_length - 1)
         end = start + self.clip_length
 
         clip = video[:, :, start:end]  # Shape: (clip_length, C, H, W)
@@ -83,20 +85,21 @@ class ValidationClipDataset(Dataset):
     def __getitem__(self, idx):
         vid_idx, start = self.clips[idx]
         video = self.videos[vid_idx]  # Shape: (C, H, W, T)
-        keypts = self.keypoints[vid_idx]  # Shape: (T, N, 2)
-
+        
         end = start + self.clip_length
+        keypts = self.keypoints[vid_idx][start:end]  # Shape: (T, N, 2)
 
         clip = video[:, :, start:end]  # Shape: (C, H, W, clip_length)
-
-        
 
         clip = clip.permute(2,0,1)  # To (clip_length, C, H, W)
 
         if clip.shape[1] != 256 or clip.shape[2] != 256:
-            clip, keypts = resize_or_crop_image_torch(clip, keypts[start:end], target_size=(256, 256))
+            clip, keypts = resize_or_crop_image_torch(clip, keypts, target_size=(256, 256))
+        clip, keypts = apply_transform_val(clip, keypts, version=0)
         
         clip = clip.unsqueeze(0)  # Shape: (1, clip_length, C, H, W)
+
+        
 
         clip = clip - clip.min()
         clip = clip / clip.max()

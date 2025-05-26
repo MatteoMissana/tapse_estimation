@@ -18,7 +18,7 @@ from postprocessing.cardiac_phase_detection import systole_diatole_detection
 from postprocessing.pan_tompkins import pan_tompkins_detector
 from utils.plot import visualize_image
 
-def predict_indices(model, test_path, filter=False):
+def predict_indices(model, model_memory, test_path, filter=False):
     """
     Predicts the RVLSF index from a cardiac sequence using a trained segmentation model.
     
@@ -39,6 +39,7 @@ def predict_indices(model, test_path, filter=False):
         ecg = f['ecg']['ecg_data'][()]
         ecg_times = f['ecg']['ecg_times'][()]
         pixelsize = f['tissue']['pixelsize'][()]
+        print(f"Pixelsize: {pixelsize}")
 
         # Compute sampling frequency of ECG
         fs = 1 / (ecg_times[1] - ecg_times[0])
@@ -82,7 +83,15 @@ def predict_indices(model, test_path, filter=False):
         im = np.expand_dims(im, axis=0)
         im = preprocess_images(im, model_type='U-Net', device=device)
         im = im.float().unsqueeze(0).to(device)
-        im = im.repeat(1, 1, 3, 1, 1)
+        # im = im.repeat(1, 1, 3, 1, 1)
+
+        if i != 0:
+            model = model_memory
+
+            gaussian_map = generate_image_with_gaussians(256, [coordinates_array[i].tolist()], std=10.0).to(device)
+            gaussian_map = gaussian_map.unsqueeze(0).unsqueeze(0)
+
+            im = torch.cat((im, gaussian_map), dim=2)
 
         # Run detection model
         output = model(im)
@@ -92,7 +101,8 @@ def predict_indices(model, test_path, filter=False):
         coordinates_2 = center_of_mass(output[0, 1].detach())
         coordinates_3 = center_of_mass(output[0, 2].detach())
 
-        # visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
+        # if i % 10 == 0:
+        #     visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
 
         coordinates_array[i, 0] = coordinates_1
         coordinates_array[i, 1] = coordinates_2
@@ -133,8 +143,8 @@ def predict_indices(model, test_path, filter=False):
     direction_free_wall = find_parallel_direction(coordinates_array[:, 0])  # direction parallel to the movement of the free wall
     direction_septum = find_parallel_direction(coordinates_array[:, 1])  # direction parallel to the movement of the septum
 
-    average_direction = direction_free_wall + direction_septum
-    average_direction /= np.linalg.norm(average_direction)
+    # average_direction = direction_free_wall + direction_septum
+    # average_direction /= np.linalg.norm(average_direction)
 
     # Compute RVLSF for each heartbeat segment
     index_container = np.zeros((len(beat_start)-1, 17))
@@ -145,7 +155,7 @@ def predict_indices(model, test_path, filter=False):
         rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep, rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal = tric_apex_distance_calculation(window[:,0], window[:,1], window[:,2])
 
         # Calculate TAPSE
-        tapse_sep, tapse_fw, tapse = tapse_calculation(coordinates_fw=window[:, 0], coordinates_septum=window[:, 1], direction = average_direction)
+        tapse_sep, tapse_fw, tapse = tapse_calculation(coordinates_fw=window[:, 0], coordinates_septum=window[:, 1], direction_septum=direction_septum, direction_fw=direction_free_wall)
 
         index_container[i, 0] = tapse_fw*1000  # Convert to mm
         index_container[i, 1] = tapse_sep*1000  # Convert to mm
@@ -174,15 +184,15 @@ if __name__ == "__main__":
     h5_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated'
     excel_path = r"D:\mmissana\data/RV_PATIENTS/Results_memory/UNet_memory.xlsx"
 
-    model_checkpoint = r'D:\mmissana\runs\unet_augm7_gaussian_curve_training\best_model.pth'
-    model_checkpoint_memory = r'D:\mmissana\tapse_estimation/2d+memory/runs/unet_with_memory/best_model.pth'
+    model_checkpoint = r'D:\mmissana\tapse_estimation/2d/runs/Unet_1_channel/best_model.pth'
+    model_checkpoint_memory = r'D:\mmissana\tapse_estimation/2d+memory/runs/Unet_memory_2_channels/best_model.pth'
 
     # Set device to GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize and load the trained U-Net model
-    model = UNet(num_classes=3, depth=6, start_filts=8, in_channels = 3).to(device)
-    model_2 = Unet_memory(num_classes=3, depth=6, start_filts=8, in_channels = 4).to(device)
+    model = UNet(num_classes=3, depth=6, start_filts=8, in_channels = 1).to(device)
+    model_2 = Unet_memory(num_classes=3, depth=6, start_filts=8, in_channels = 2).to(device)
     model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
     model_2.load_state_dict(torch.load(model_checkpoint_memory, map_location=device)['model_state_dict'])
 
@@ -208,14 +218,13 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = UNet(num_classes=3, depth=6, start_filts=8, in_channels=3).to(device)
     model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
 
     for path in paths:
         test_path = os.path.join(h5_path, path + ".h5")
         print(f"Processing file: {test_path}")
 
-        indexes = predict_indices(model, test_path)
+        indexes = predict_indices(model, model_2, test_path, filter=True)
 
         # Find the row index corresponding to the current path
         row_idx = df.index[df["path"] == path].tolist()

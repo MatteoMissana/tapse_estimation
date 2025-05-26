@@ -103,6 +103,10 @@ def random_crop(image, keypoints, crop_size = 220, p=0.5):
         scale_y = h / crop_h
         cropped_keypoints = cropped_keypoints * torch.tensor([scale_x, scale_y], device = cropped_keypoints.device)
 
+        # Clamp to image bounds
+        cropped_keypoints[:, 0] = cropped_keypoints[:, 0].clamp(0, 255)
+        cropped_keypoints[:, 1] = cropped_keypoints[:, 1].clamp(0, 255)
+
         # Keep only keypoints that remain within the resized area
         # mask = (keypoints[:, 0] >= 0) & (keypoints[:, 0] < w) & \
         #        (keypoints[:, 1] >= 0) & (keypoints[:, 1] < h)
@@ -126,6 +130,58 @@ def time_flip(image, keypoints, p=0.5):
         image = image.flip(0)  # Flip along the time axis (first dimension)
         keypoints = keypoints.flip(0)  # Flip keypoints accordingly
     return image, keypoints
+
+def vertically_align(image, keypoints):
+    keyp_0 = keypoints[0]
+    septum = keyp_0[1]
+    fw = keyp_0[0]
+    apex = keyp_0[2]
+
+    middle = (septum + fw) / 2
+
+    versor = (middle - apex) / torch.norm(middle - apex)
+    versor = torch.tensor([versor[1], versor[0]], device=versor.device)  # Flip y-component
+
+    # print("versor", versor)
+
+    # Desired direction is up: [0, -1] (negative y)
+    vertical = torch.tensor([-1.0, 0.0], device=versor.device)
+
+    # Compute angle between versor and vertical
+    dot = torch.dot(versor, vertical).clamp(-1.0, 1.0)
+    angle_rad = torch.acos(dot)
+
+    # Determine rotation direction using 2D cross product (sign)
+    cross = versor[0] * vertical[1] - versor[1] * vertical[0]
+    if cross < 0:
+        angle_rad = -angle_rad
+
+    angle_deg = torch.rad2deg(angle_rad).item()
+    
+    T, H, W = image.shape
+    center = torch.tensor([W / 2, H / 2], device=image.device)
+
+    # Rotate each frame
+    aligned_frames = [
+        TF.rotate(image[i].unsqueeze(0), angle_deg).squeeze(0)
+        for i in range(T)
+    ]
+    aligned_sequence = torch.stack(aligned_frames)
+
+    # Inverse rotation for keypoints
+    rot_mat = torch.tensor([
+        [torch.cos(-angle_rad), -torch.sin(-angle_rad)],
+        [torch.sin(-angle_rad),  torch.cos(-angle_rad)]
+    ], device=image.device)
+
+    aligned_keypoints = keypoints.view(-1, 2)
+    aligned_keypoints = (aligned_keypoints - center) @ rot_mat.T + center
+
+    aligned_keypoints[:, 0] = aligned_keypoints[:, 0].clamp(0, 255)
+    aligned_keypoints[:, 1] = aligned_keypoints[:, 1].clamp(0, 255)
+
+    return aligned_sequence, aligned_keypoints.view_as(keypoints)
+
 
 def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str = '0'):
     """Apply transformations to an image and its keypoints."""
@@ -165,11 +221,18 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
         image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
     elif version == '8':
         # image = adjust_brightness_contrast(image, brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2))
-        image = add_gaussian_noise(image, std = 0.04)
-        image, keypoints = random_rotate(image, keypoints, degrees=(-15, 15), p=.6)
+        # image = add_gaussian_noise(image, std = 0.04)
+        image, keypoints = vertically_align(image, keypoints)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-5, 5), p=.6)
         image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
         image, keypoints = time_flip(image, keypoints, p=.5)
+        # TODO: there's a problem: when cropping, the keypoints go out of bounds sometimes
+
     else:
         raise ValueError(f"Unsupported version: {version}")
 
+    return image, keypoints
+
+def apply_transform_val(image: torch.Tensor, keypoints: torch.Tensor, version: str = '0'):
+    image, keypoints = vertically_align(image, keypoints)
     return image, keypoints

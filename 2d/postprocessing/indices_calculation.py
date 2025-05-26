@@ -68,10 +68,19 @@ def tapse_calculation(
     The pixelsize is a list containing the pixel size in mm for each dimension.
     """
 
-    projection_septum = coordinates_septum @ direction
-    projection_fw = coordinates_fw @ direction
-    tapse_septum = projection_septum.max() - projection_septum.min()
-    tapse_fw = projection_fw.max() - projection_fw.min()
+    # projection_septum = coordinates_septum @ direction
+    # projection_fw = coordinates_fw @ direction
+    # tapse_septum = projection_septum.max() - projection_septum.min()
+    # tapse_fw = projection_fw.max() - projection_fw.min()
+    # tapse = (tapse_septum + tapse_fw) / 2
+
+    diff_septum = coordinates_septum[:, np.newaxis, :] - coordinates_septum[np.newaxis, :, :]  # forma (n, n, 2)
+    dist_septum = np.linalg.norm(diff_septum, axis=-1)  # forma (n, n)
+    tapse_septum = dist_septum.max()
+
+    diff_fw = coordinates_fw[:, np.newaxis, :] - coordinates_fw[np.newaxis, :, :]  # forma (n, n, 2)
+    dist_fw = np.linalg.norm(diff_fw, axis=-1)  # forma (n, n)
+    tapse_fw = dist_fw.max()
     tapse = (tapse_septum + tapse_fw) / 2
 
     return tapse_septum, tapse_fw, tapse

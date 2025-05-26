@@ -7,6 +7,7 @@ from torchvision import transforms as T
 from torchvision.transforms import v2 as T
 from augmentations.aug_memory import apply_transform
 from utils.plot import visualize_image
+from dataloader.preprocessing import resize_or_crop_image_torch
 
 
 def create_gaussian_kernel(size, std):
@@ -126,6 +127,39 @@ class KeypointDataset(Dataset):
 
         return input, keypoint
 
+
+class FullSequenceFirstKeypointsDataset(Dataset):
+    def __init__(self, videos, keypoints, transform=None):
+        """
+        videos: list of tensors of shape (C, H, W, T)
+        keypoints: list of tensors of shape (T, num_points, 2)
+        transform: optional transform for the video
+        """
+        self.videos = videos
+        self.keypoints = keypoints
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.videos)
+
+    def __getitem__(self, idx):
+        video = self.videos[idx]  # (C, H, W, T)
+        keypts = self.keypoints[idx]  # (T, num_points, 2)
+
+        print(f"video shape: {video.shape}")
+        video = video.permute(2,0,1)
+
+        if video.shape[1] != 256 or video.shape[2] != 256:
+            # Resize or crop video and keypoints (just first frame)
+            video, _ = resize_or_crop_image_torch(video, keypts, target_size=(256, 256))
+
+        # Normalize video (across all frames)
+        video = video - video.min()
+        video = video / video.max()
+
+        # Return full video and only first frame's keypoints
+        return video, keypts  # video: (T, C, H, W), keypts[0]: (num_points, 2)
+ 
 
 if __name__ == "__main__":
     dataset = r'D:\mmissana\data\RV_PATIENTS\dataset_256\train.npz'

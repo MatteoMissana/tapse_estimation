@@ -7,19 +7,21 @@ import random
 import os
 import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
+from torchsummary import summary
 
 from dataloader.main import KeypointDataset
 from losses.distances import OrderedDistanceLoss, GaussianKeypointLoss
 from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
-from models.models import EncoderDecoder_3d
+from models.models import EncoderDecoder_3d, Unet as monai_UNet, ResNet50Regression, ResNet34Regression, ResNet18Regression, SwinUNETR, ResNeXt50Regression
 from models.improved_unet import ImprovedUnet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
-from utils.plot import save_image
+from utils.plot import save_image, visualize_image
 from utils.save import get_experiment_path
 from callbacks.early_stopping import EarlyStopping
 from callbacks.lr_schedule import ReduceLROnPlateau
+
 
 
 # Argument parser
@@ -44,6 +46,10 @@ def parse_args():
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
     parser.add_argument('--thresh', type=float, default=0.9, help='Treshold for center of mass calculation')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
+    parser.add_argument('--start_filts', type=int, default=8, help='Number of filters in the first layer of the model when using monai unet')
+    parser.add_argument('--depth', type=int, default=6, help='Number of layers in the model when using monai unet')
+    parser.add_argument('--dropout', type=float, default=0.0, help='Dropout rate for the model, supported only for monai unet')
+    parser.add_argument('--n_residuals', type=int, default=0, help='Number of residual blocks in the model when using monai unet')
 
     return parser.parse_args()
 
@@ -82,13 +88,18 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
 
                 outputs = model(images)  # Forward pass	
 
-                # Compute center of mass for output masks
-                com_tensor = torch.stack([
-                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
-                    for output in outputs
-                ]).to(device)
+                if 'ResNet' not in args.model and 'resnext' not in args.model: # If not using ResNet, compute center of mass
+                    # Compute center of mass for output masks
+                    com_tensor = torch.stack([
+                        torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                        for output in outputs
+                    ]).to(device)
 
-                loss = criterion(com_tensor, masks)
+                    loss = criterion(com_tensor, masks)
+
+                else: # resnet does a regression
+                    loss = criterion(outputs, masks)
+
                 loss.backward()
                 optimizer.step()
 
@@ -133,12 +144,18 @@ def validate(model, val_loader, criterion, thresh=0.9):
             images, masks = images.to(device), masks.to(device)
             outputs = model(images)
 
-            com_tensor = torch.stack([
-                torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
-                for output in outputs
-            ]).to(device)
+            if 'ResNet' not in args.model and 'resnext' not in args.model:  # If not using ResNet, compute center of mass
+                # Compute center of mass for output masks
+                com_tensor = torch.stack([
+                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                    for output in outputs
+                ]).to(device)
 
-            loss = criterion(com_tensor, masks)
+                loss = criterion(com_tensor, masks)
+
+            else: # resnet does a regression
+                loss = criterion(outputs, masks)
+
             val_loss += loss.item()
 
     avg_val_loss = val_loss / len(val_loader)
@@ -179,13 +196,18 @@ class Tester:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
 
-                com_tensor = torch.stack([
-                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh= self.thresh) for mask in output])
-                    for output in outputs
-                ]).to(device)
+                if 'ResNet' not in args.model and 'resnext' not in args.model:
+                    com_tensor = torch.stack([
+                        torch.stack([center_of_mass(mask, device=device, normalize=False, thresh= self.thresh) for mask in output])
+                        for output in outputs
+                    ]).to(device)
 
-                loss1 = self.criterion1(com_tensor, masks)
-                loss2 = self.criterion2(com_tensor, masks)
+                    loss1 = self.criterion1(com_tensor, masks)
+                    loss2 = self.criterion2(com_tensor, masks)
+                
+                else:  # ResNet does a regression
+                    loss1 = self.criterion1(outputs, masks)
+                    loss2 = self.criterion2(outputs, masks)
                 
                 val_loss1 += loss1.item()
                 val_loss2 += loss2.item()
@@ -230,18 +252,52 @@ def main():
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
-    elif args.model == "echocoder_2d+t":
-        model = EncoderDecoder_3d().to(device)
+    elif args.model == "monai_U-Net":
+        model = monai_UNet(start_filts = args.start_filts, depth = args.depth, dropout= args.dropout, num_residuals=args.n_residuals).to(device)
+        if args.from_scratch:
+            pass
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "ResNet50":
+        model = ResNet50Regression().to(device)
         if args.from_scratch:
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
-    elif args.model == "improved_unet":
-        model = ImprovedUnet(in_channels=1, out_channels=args.num_keypoints, max_channels=32).to(device)
+    elif args.model == "ResNet34":
+        model = ResNet34Regression().to(device)
         if args.from_scratch:
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "ResNet18":
+        model = ResNet18Regression().to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "swinunetr":
+        model = SwinUNETR(start_filts=args.start_filts).to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            # TODO: load state dict
+            pass
+    elif args.model == "resnext50":
+        model = ResNeXt50Regression().to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    # elif args.model == "improved_unet":
+    #     model = ImprovedUnet(in_channels=1, out_channels=args.num_keypoints, max_channels=32).to(device)
+    #     if args.from_scratch:
+    #         initialize_weights(model)
+    #     else:
+    #         model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+
+
+    summary(model, input_size=(1, 1, 256, 256))
 
     # Define loss function and optimizer
     if args.loss == 'ordered_distance':

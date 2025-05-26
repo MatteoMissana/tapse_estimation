@@ -115,6 +115,12 @@ def preprocess_images(images_array, model_type="EchoCoder", device='cpu'):
         # images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)       
     elif model_type == "improved_unet":
         images_tensor = torch.tensor(images_array)
+    elif model_type == "monai_U-Net":
+        images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
+    elif model_type == "swinunetr":
+        images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)
+    elif "ResNet" or  "resnext" in model_type:
+        images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
     return images_tensor
 
 # def preprocess_images_with_augmentations(images_array, model_type="EchoCoder", device='cpu'):

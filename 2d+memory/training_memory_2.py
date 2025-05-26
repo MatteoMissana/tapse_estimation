@@ -2,7 +2,6 @@ import argparse
 import torch
 from torch.utils.data import DataLoader
 import torch.optim as optim
-import torch.nn.functional as F
 import numpy as np
 import random
 import os
@@ -10,15 +9,15 @@ import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
 import h5py
 
-from dataloader.main import KeypointDataset
-from dataloader.dataset_creation_sequences_64 import RandomClipDataset, ValidationClipDataset, RandomClipDataset_gaussian_map
-from losses.distances import OrderedDistanceLoss_3d, GaussianKeypointLoss,OrderedDistanceLoss
-from models.tasken_unet import UNet
+from dataloader.dataset_creation_memory import KeypointDataset, FullSequenceFirstKeypointsDataset, generate_image_with_gaussians
+from losses.distances import OrderedDistanceLoss, GaussianKeypointLoss
+from models.tasken_unet_with_memory import UNet
 from models.weights_initialization import initialize_weights
 from models.models import EncoderDecoder_3d
-from postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
+from models.improved_unet import ImprovedUnet
+from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
-from utils.plot import save_image, visualize_image
+from utils.plot import save_image
 from utils.save import get_experiment_path
 from callbacks.early_stopping import EarlyStopping
 from callbacks.lr_schedule import ReduceLROnPlateau
@@ -31,16 +30,20 @@ def parse_args():
     parser.add_argument('--patience', type=int, default=10, help='Early stopping patience')
     parser.add_argument('--num_keypoints', type=int, default=3, help='Early stopping patience')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
-    parser.add_argument('--model', type=str, default='echocoder_2d+t', help='name of the model: supported "U-Net"')
+    parser.add_argument('--model', type=str, default='U-Net', help='name of the model: supported "U-Net"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
-    parser.add_argument('--batch_size', type=int, default=1, help='Batch size for DataLoader')
+    parser.add_argument('--train_data', type=str, default= r'D:\mmissana\data\RV_PATIENTS\dataset_256\train.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default=r'D:\mmissana\data\RV_PATIENTS\dataset_256\val.npz', help='Path to the validation dataset')
+    parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
+    parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
     parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
     parser.add_argument('--augm_version', type=str, default='0', help='augmentation version you want to use')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='select the type of loss: "MSE" or "distance"')
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--thresh', type=float, default=0.9, help='Treshold for center of mass calculation')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
 
     return parser.parse_args()
@@ -63,10 +66,10 @@ if torch.cuda.is_available():
 g = torch.Generator()
 g.manual_seed(args.seed)
 
-def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None):
+def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None, thresh=0.9):
     model.train()
-    early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path, delta=0.01)
-    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=9, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
+    early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path)
+    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=3, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
@@ -75,41 +78,26 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         # Use tqdm to create a progress bar for the training loop
         with tqdm(total=len(train_loader), desc=f"Training Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
             for images, masks in train_loader:
-                
                 images, masks = images.to(device), masks.to(device)
+                print(f"images shape: {images.shape}")
+                print(f"masks shape: {masks.shape}")
                 optimizer.zero_grad()
-                
-                # print(masks[0, 0, 0])
-                # print(masks[0, 1, 0])
-                # print(masks[0, 2, 0])
-                # print(f"Images shape: {images.shape}, Masks shape: {masks.shape}")
-                # for i in range(64):
-                #     visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
 
-                # print(images.max(), images.min())
+                print(masks[:,0].tolist())
 
-                # print(images.shape)
-                outputs = model(images)  # Forward pass
-                
-                outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
-                # print(f"Outputs shape: {outputs.shape}, masks shape: {masks.shape}")
-                
+                gaussian_keypoints = generate_image_with_gaussians(256, masks[:,0].tolist(), std=10.0).to(device)
 
-                # visualize_image(masks[0, 0, 0].cpu().numpy())
-                # visualize_image(outputs[0, 0, 0].cpu().detach().numpy())
+                input = torch.cat((images[:,0], gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
 
-                if args.loss == 'ordered_distance' or args.loss == 'gaussian':
-                    # Compute center of mass for output masks
-                    com_tensor = torch.stack([
-                        center_of_mass_3d(output, device=device, normalize=False)
-                    for output in outputs]).to(device)
+                outputs = model(input)  # Forward pass	
 
-                    # print(com_tensor[0,0,0])
-                    # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
-                    # print(f"com_tensor shape: {com_tensor.shape}, masks shape: {masks.shape}")
-                    loss = criterion(com_tensor, masks)
+                # Compute center of mass for output masks
+                com_tensor = torch.stack([
+                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                    for output in outputs
+                ]).to(device)
 
-
+                loss = criterion(com_tensor, masks)
                 loss.backward()
                 optimizer.step()
 
@@ -117,8 +105,31 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 pbar.set_postfix(loss=loss.item())  # Update progress bar with loss
                 pbar.update(1)  # Move progress bar forward
 
+                for image in images[0, 1:]:
+                    image = image.unsqueeze(0)
+                    gaussian_keypoints = generate_image_with_gaussians(256, com_tensor.tolist(), std=10.0).to(device)
+
+
+                    input = torch.cat((image, gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
+                    outputs = model(input)
+                    # Compute center of mass for output masks
+                    com_tensor = torch.stack([
+                        torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                        for output in outputs
+                    ]).to(device)
+
+                    loss = criterion(com_tensor, masks)
+                    loss.backward()
+                    optimizer.step()
+
+                    running_loss += loss.item()
+                    pbar.set_postfix(loss=loss.item())  # Update progress bar with loss
+                
         avg_loss = running_loss / len(train_loader)
-        val_loss = validate(model, val_loader, criterion)
+
+
+        # avg_loss = running_loss / len(train_loader)
+        val_loss = validate(model, val_loader, criterion, thresh=thresh)
         scheduler(val_loss)
 
         # Log losses to wandb
@@ -146,26 +157,57 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
     print("Training complete!")
     print(f"results saved in {save_model_path}")
 
-def validate(model, val_loader, criterion):
+def validate(model, val_loader, criterion, thresh=0.9):
     model.eval()
     val_loss = 0.0
     with torch.no_grad():
+        # for images, masks in val_loader:
+        #     images, masks = images.to(device), masks.to(device)
+        #     outputs = model(images)
+
+        #     com_tensor = torch.stack([
+        #         torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+        #         for output in outputs
+        #     ]).to(device)
+
+        #     loss = criterion(com_tensor, masks)
+        #     val_loss += loss.item()
+
         for images, masks in val_loader:
             images, masks = images.to(device), masks.to(device)
-            outputs = model(images)
-            print(f"Outputs shape: {outputs.shape}, Masks shape: {masks.shape}")
-            outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
+
+            gaussian_keypoints = generate_image_with_gaussians(256, masks[:,0].tolist(), std=10.0).to(device)
+
+            input = torch.cat((images[:,0], gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
+            
+            print(f"input shape: {input.shape}")
+            outputs = model(input)  # Forward pass	
 
             # Compute center of mass for output masks
             com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
+                torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                for output in outputs
+            ]).to(device)
 
             loss = criterion(com_tensor, masks)
+
             val_loss += loss.item()
 
+            for image in images[0, 1:]:
+                image = image.unsqueeze(0)
+                gaussian_keypoints = generate_image_with_gaussians(256, com_tensor.tolist(), std=10.0).to(device)
+
+
+                input = torch.cat((image, gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
+                outputs = model(input)
+                # Compute center of mass for output masks
+                com_tensor = torch.stack([
+                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
+                    for output in outputs
+                ]).to(device)
+
+                loss = criterion(com_tensor, masks)
+                val_loss += loss.item()
     avg_val_loss = val_loss / len(val_loader)
     return avg_val_loss
 
@@ -178,9 +220,10 @@ class Tester:
         criterion2 (callable): Second loss function.
     """
     
-    def __init__(self, criterion1, criterion2):
+    def __init__(self, criterion1, criterion2, thresh=0.9):
         self.criterion1 = criterion1
         self.criterion2 = criterion2
+        self.thresh = thresh
     
     def __call__(self, model, test_loader, device):
         """
@@ -202,15 +245,12 @@ class Tester:
             for images, masks in test_loader:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
-                outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
 
-                # Compute center of mass for output masks
                 com_tensor = torch.stack([
-                    center_of_mass_3d(output, device=device, normalize=False)
-                for output in outputs]).to(device)
+                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh= self.thresh) for mask in output])
+                    for output in outputs
+                ]).to(device)
 
-                # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
-                
                 loss1 = self.criterion1(com_tensor, masks)
                 loss2 = self.criterion2(com_tensor, masks)
                 
@@ -242,6 +282,7 @@ def main():
         }
     )
 
+    # Load dataset
     # Load dataset
     txt_path = r'c:\Users\vcxr10\Desktop\dataset_division_by_patient.txt'  # Path to the dataset division text file
     videos = []
@@ -293,36 +334,38 @@ def main():
     print(f"Number of validation videos: {len(videos_val)}")
     print(f"Number of test videos: {len(videos_test)}")
     if args.loss == 'ordered_distance' or args.loss == 'gaussian':
-        train_dataset = RandomClipDataset(videos, keypoints, transform = args.augm_version)
-    else:
-        train_dataset = RandomClipDataset_gaussian_map(videos, keypoints, transform = args.augm_version)
-    val_dataset = ValidationClipDataset(videos_val, keypoints_val)
+        train_dataset = FullSequenceFirstKeypointsDataset(videos, keypoints, transform = args.augm_version)
+    val_dataset = FullSequenceFirstKeypointsDataset(videos_val, keypoints_val)
     
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=g)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 
-    if args.model == "echocoder_2d+t":
-        model = EncoderDecoder_3d(num_classes= 3).to(device)
+    # Define model
+    if args.model == "U-Net":
+        model = UNet(num_classes=args.num_keypoints, depth=6, start_filts=8, in_channels=2).to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "echocoder_2d+t":
+        model = EncoderDecoder_3d().to(device)
+        if args.from_scratch:
+            initialize_weights(model)
+        else:
+            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "improved_unet":
+        model = ImprovedUnet(in_channels=1, out_channels=args.num_keypoints, max_channels=32).to(device)
         if args.from_scratch:
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
 
-
     # Define loss function and optimizer
-    if args.loss == 'MSE':
-        criterion = OrderedDistanceLoss() 
-    elif args.loss == 'distance':
-        criterion = UnorderedDistanceLoss()
-    elif args.loss == 'ordered_distance':
-        criterion = OrderedDistanceLoss_3d(reduction='mean')
-    elif args.loss == 'gaussian':
-        criterion = GaussianKeypointLoss(sigma = 20)
-    else:
+    if args.loss == 'ordered_distance':
         criterion = OrderedDistanceLoss()
-
-
+    if args.loss == 'gaussian':
+        criterion = GaussianKeypointLoss(sigma = 20)
 
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
 
@@ -332,16 +375,16 @@ def main():
     if not os.path.exists(save_model_path):
         os.makedirs(save_model_path)
 
-    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path, save_model_path)
+    train_model(model, train_loader, val_loader, criterion, optimizer, args.epochs, args.patience, args.checkpoint_path, save_model_path, thresh=args.thresh)
 
     # Run inference on test set
     model.eval()
-    test_dataset = ValidationClipDataset(videos_test, keypoints_test)
+    test_path = r'D:\mmissana\data\RV_PATIENTS\dataset_256\test.npz'
+    test_dataset = KeypointDataset(test_path, filter=True, model_type=args.model)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 
-    metric1 = OrderedDistanceLoss()
     metric2 = OrderedDistanceLoss()
-    tester = Tester(metric2, metric1)
+    tester = Tester(metric2, metric2, thresh=args.thresh)
     test_distance, test_MSE = tester(model, test_loader, device=device)
 
         # Log final test results to wandb
@@ -349,29 +392,22 @@ def main():
     wandb.summary["test_MSE"] = test_MSE
 
     if args.save_images:
+        data = np.load(test_path)
+        images = data['images']
 
         os.makedirs(save_model_path, exist_ok=True)
 
-        for images, masks in test_loader:
-            images, masks = images.to(device), masks.to(device)
+        for im in images:
+            im = np.expand_dims(im, axis=0)
+            im = preprocess_images(im, model_type=args.model, device=device)
+            im = im.unsqueeze(0)
+            output = model(im)
+            coordinates_1 = center_of_mass(output[0, 0].detach(), thresh=args.thresh)
+            coordinates_2 = center_of_mass(output[0, 1].detach(), thresh=args.thresh)
+            coordinates_3 = center_of_mass(output[0, 2].detach(), thresh=args.thresh)
 
-            outputs = model(images)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
+            # Save results
+            save_image(im[0, 0, 0].cpu().numpy(), points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
 
     #Finish wandb run
     wandb.finish()

@@ -64,7 +64,7 @@ def random_crop(image, keypoints, crop_size = 220, p=0.5):
         image = TF.crop(image, top, left, crop_h, crop_w)
 
         # Resize image back to original size
-        image = TF.resize(image, (h, w))
+        image = TF.resize(image, (h, w), antialias = True)
 
         # Adjust keypoints
         keypoints = keypoints.view(-1, 2)  # Ensure keypoints are in (N, 2) format
