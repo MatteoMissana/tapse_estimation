@@ -196,7 +196,7 @@ class Tester:
                 images, masks = images.to(device), masks.to(device)
                 outputs = model(images)
 
-                if 'ResNet' not in args.model and 'resnext' not in args.model:
+                if 'ResNet' not in args.model and 'resnext' not in args.model:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
                     com_tensor = torch.stack([
                         torch.stack([center_of_mass(mask, device=device, normalize=False, thresh= self.thresh) for mask in output])
                         for output in outputs
@@ -204,9 +204,8 @@ class Tester:
 
                     loss1 = self.criterion1(com_tensor, masks)
                     loss2 = self.criterion2(com_tensor, masks)
-                
-                else:  # ResNet does a regression
-                    loss1 = self.criterion1(outputs, masks)
+                else:  # ResNet does a regression                                   
+                    loss1 = self.criterion1(outputs, masks)                                       
                     loss2 = self.criterion2(outputs, masks)
                 
                 val_loss1 += loss1.item()

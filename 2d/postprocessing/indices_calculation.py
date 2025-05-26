@@ -61,27 +61,39 @@ def tapse_calculation(
     coordinates_septum: np.ndarray,
     coordinates_fw: np.ndarray,
     direction: np.ndarray,
+    tapse_calc = 'distance'
 ):
     """
     Calculate TAPSE (Tricuspid Annular Plane Systolic Excursion) from the coordinates of the septum and free wall.
     The coordinates should be in the format (x, y) and the direction should be a unit vector.
     The pixelsize is a list containing the pixel size in mm for each dimension.
+
+    based on the parameter "tapse_calc", the function will calculate the tapse in two different ways:
+    - 'distance': just calculates the maximum distance between the points in the septum and free wall for the time you provide
+    - 'projection': projects the points in the direction of the vector and calculates the distance between the maximum and minimum projection for both septum and free wall, then averages them
     """
 
-    # projection_septum = coordinates_septum @ direction
-    # projection_fw = coordinates_fw @ direction
-    # tapse_septum = projection_septum.max() - projection_septum.min()
-    # tapse_fw = projection_fw.max() - projection_fw.min()
-    # tapse = (tapse_septum + tapse_fw) / 2
+    if tapse_calc not in ['distance', 'projection']:
+        raise ValueError("tapse_calc must be either 'distance' or 'projection'")
+    elif tapse_calc == 'projection' and direction is None:
+        raise ValueError("If tapse_calc is 'projection', direction must be provided")
+    
+    elif tapse_calc == 'distance':
+        diff_septum = coordinates_septum[:, np.newaxis, :] - coordinates_septum[np.newaxis, :, :]  # forma (n, n, 2)
+        dist_septum = np.linalg.norm(diff_septum, axis=-1)  # forma (n, n)
+        tapse_septum = dist_septum.max()
 
-    diff_septum = coordinates_septum[:, np.newaxis, :] - coordinates_septum[np.newaxis, :, :]  # forma (n, n, 2)
-    dist_septum = np.linalg.norm(diff_septum, axis=-1)  # forma (n, n)
-    tapse_septum = dist_septum.max()
+        diff_fw = coordinates_fw[:, np.newaxis, :] - coordinates_fw[np.newaxis, :, :]  # forma (n, n, 2)
+        dist_fw = np.linalg.norm(diff_fw, axis=-1)  # forma (n, n)
+        tapse_fw = dist_fw.max()
+        tapse = (tapse_septum + tapse_fw) / 2
 
-    diff_fw = coordinates_fw[:, np.newaxis, :] - coordinates_fw[np.newaxis, :, :]  # forma (n, n, 2)
-    dist_fw = np.linalg.norm(diff_fw, axis=-1)  # forma (n, n)
-    tapse_fw = dist_fw.max()
-    tapse = (tapse_septum + tapse_fw) / 2
+    elif tapse_calc == 'projection':
+        projection_septum = coordinates_septum @ direction
+        projection_fw = coordinates_fw @ direction
+        tapse_septum = projection_septum.max() - projection_septum.min()
+        tapse_fw = projection_fw.max() - projection_fw.min()
+        tapse = (tapse_septum + tapse_fw) / 2
 
     return tapse_septum, tapse_fw, tapse
 
