@@ -87,7 +87,7 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
             window[:, 0], window[:, 1], window[:, 2]
         )
 
-        tapse_sep, tapse_fw, tapse = tapse_calculation(window[:, 0], window[:, 1], direction, tapse_calc=tapse_calc)
+        tapse_sep, tapse_fw, tapse = tapse_calculation(window[:, 1], window[:, 0], direction, tapse_calc=tapse_calc)
 
         index_container[i] = [
             tapse_fw * 1000, tapse_sep * 1000, rvfac, diast_area * 1e4, syst_area * 1e4,

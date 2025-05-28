@@ -11,3 +11,5 @@ best_predictions_video.mp4
 results_video.mp4
 
 *.pth
+*.pdf
+*.xlsx

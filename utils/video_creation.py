@@ -87,6 +87,6 @@ def create_video_from_h5(file_path, output_video_path, num_landmarks=3, fps=30):
 
 if __name__ == "__main__":
     
-    folder = r'runs/exp24'
-    output = r'D:\mmissana\results_video.mp4'
+    folder = r'd:\mmissana\test_results\monai_unet\_193239\P429G9OQ'
+    output = r'D:\mmissana\test_results/monai_unet_videos/198.mp4'
     create_video_from_images(folder, output, fps = 5)
