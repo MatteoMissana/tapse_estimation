@@ -118,7 +118,7 @@ def apply_transform(img1: torch.Tensor, img2: torch.Tensor, keypoints: torch.Ten
         img1 = add_gaussian_noise(img1, 0.04)
         img1, img2, keypoints = random_rotate(img1, img2, keypoints, degrees=(-15, 15), p=0.6)
         img1, img2, keypoints = random_crop(img1, img2, keypoints, crop_size=230, p=0.6)
-        img2 = slightly_perturb_image(img2, degrees=(-3, 3), translate=(0.001, 0.001), crop_size=240)
+        img2 = slightly_perturb_image(img2, degrees=(-10, 10), translate=(0.1, 0.1), crop_size=240)
 
     else:
         raise ValueError(f"Unsupported version: {version}")

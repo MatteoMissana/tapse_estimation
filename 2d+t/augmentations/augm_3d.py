@@ -223,7 +223,7 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
         # image = adjust_brightness_contrast(image, brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2))
         # image = add_gaussian_noise(image, std = 0.04)
         image, keypoints = vertically_align(image, keypoints)
-        image, keypoints = random_rotate(image, keypoints, degrees=(-5, 5), p=.6)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-15, 15), p=.6)
         image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
         image, keypoints = time_flip(image, keypoints, p=.5)
         # TODO: there's a problem: when cropping, the keypoints go out of bounds sometimes

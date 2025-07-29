@@ -212,8 +212,8 @@ def save_image(image, points=None, save_folder="visualizations"):
     
     # Create the plot
     plt.imshow(image, cmap='gray')
-    plt.colorbar()
-    plt.title("2D Image Visualization")
+    # plt.colorbar()
+    # plt.title("2D Image Visualization")
     plt.axis('off')
     
     # If points are provided, plot them in red

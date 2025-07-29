@@ -7,13 +7,12 @@ import random
 import os
 import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
-import h5py
 
-from dataloader.dataset_creation_memory import KeypointDataset, FullSequenceFirstKeypointsDataset, generate_image_with_gaussians
+from dataloader.dataset_creation_memory import KeypointDataset
 from losses.distances import OrderedDistanceLoss, GaussianKeypointLoss
 from models.tasken_unet_with_memory import UNet
 from models.weights_initialization import initialize_weights
-from models.models import EncoderDecoder_3d
+from models.models import EncoderDecoder_3d, Unet
 from models.improved_unet import ImprovedUnet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from dataloader.preprocessing import preprocess_images
@@ -21,6 +20,7 @@ from utils.plot import save_image
 from utils.save import get_experiment_path
 from callbacks.early_stopping import EarlyStopping
 from callbacks.lr_schedule import ReduceLROnPlateau
+from utils.plot import visualize_image
 
 
 # Argument parser
@@ -43,7 +43,7 @@ def parse_args():
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--thresh', type=float, default=0.9, help='Treshold for center of mass calculation')
+    parser.add_argument('--thresh', type=float, default=0.8, help='Treshold for center of mass calculation')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
 
     return parser.parse_args()
@@ -79,17 +79,11 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         with tqdm(total=len(train_loader), desc=f"Training Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
             for images, masks in train_loader:
                 images, masks = images.to(device), masks.to(device)
-                print(f"images shape: {images.shape}")
-                print(f"masks shape: {masks.shape}")
                 optimizer.zero_grad()
+                # visualize_image(images[0,0,0].cpu().numpy()+images[0,0,1].cpu().numpy())
+                # visualize_image(images[0,0,1].cpu().numpy())
 
-                print(masks[:,0].tolist())
-
-                gaussian_keypoints = generate_image_with_gaussians(256, masks[:,0].tolist(), std=10.0).to(device)
-
-                input = torch.cat((images[:,0], gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
-
-                outputs = model(input)  # Forward pass	
+                outputs = model(images)  # Forward pass	
 
                 # Compute center of mass for output masks
                 com_tensor = torch.stack([
@@ -105,30 +99,7 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 pbar.set_postfix(loss=loss.item())  # Update progress bar with loss
                 pbar.update(1)  # Move progress bar forward
 
-                for image in images[0, 1:]:
-                    image = image.unsqueeze(0)
-                    gaussian_keypoints = generate_image_with_gaussians(256, com_tensor.tolist(), std=10.0).to(device)
-
-
-                    input = torch.cat((image, gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
-                    outputs = model(input)
-                    # Compute center of mass for output masks
-                    com_tensor = torch.stack([
-                        torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
-                        for output in outputs
-                    ]).to(device)
-
-                    loss = criterion(com_tensor, masks)
-                    loss.backward()
-                    optimizer.step()
-
-                    running_loss += loss.item()
-                    pbar.set_postfix(loss=loss.item())  # Update progress bar with loss
-                
         avg_loss = running_loss / len(train_loader)
-
-
-        # avg_loss = running_loss / len(train_loader)
         val_loss = validate(model, val_loader, criterion, thresh=thresh)
         scheduler(val_loss)
 
@@ -161,53 +132,18 @@ def validate(model, val_loader, criterion, thresh=0.9):
     model.eval()
     val_loss = 0.0
     with torch.no_grad():
-        # for images, masks in val_loader:
-        #     images, masks = images.to(device), masks.to(device)
-        #     outputs = model(images)
-
-        #     com_tensor = torch.stack([
-        #         torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
-        #         for output in outputs
-        #     ]).to(device)
-
-        #     loss = criterion(com_tensor, masks)
-        #     val_loss += loss.item()
-
         for images, masks in val_loader:
             images, masks = images.to(device), masks.to(device)
+            outputs = model(images)
 
-            gaussian_keypoints = generate_image_with_gaussians(256, masks[:,0].tolist(), std=10.0).to(device)
-
-            input = torch.cat((images[:,0], gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
-            
-            print(f"input shape: {input.shape}")
-            outputs = model(input)  # Forward pass	
-
-            # Compute center of mass for output masks
             com_tensor = torch.stack([
                 torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
                 for output in outputs
             ]).to(device)
 
             loss = criterion(com_tensor, masks)
-
             val_loss += loss.item()
 
-            for image in images[0, 1:]:
-                image = image.unsqueeze(0)
-                gaussian_keypoints = generate_image_with_gaussians(256, com_tensor.tolist(), std=10.0).to(device)
-
-
-                input = torch.cat((image, gaussian_keypoints), dim=0).unsqueeze(0).unsqueeze(0)  # Concatenate along the channel dimension
-                outputs = model(input)
-                # Compute center of mass for output masks
-                com_tensor = torch.stack([
-                    torch.stack([center_of_mass(mask, device=device, normalize=False, thresh=thresh) for mask in output])
-                    for output in outputs
-                ]).to(device)
-
-                loss = criterion(com_tensor, masks)
-                val_loss += loss.item()
     avg_val_loss = val_loss / len(val_loader)
     return avg_val_loss
 
@@ -283,59 +219,8 @@ def main():
     )
 
     # Load dataset
-    # Load dataset
-    txt_path = r'c:\Users\vcxr10\Desktop\dataset_division_by_patient.txt'  # Path to the dataset division text file
-    videos = []
-    keypoints = []
-    videos_val = []
-    keypoints_val = []
-    videos_test = []
-    keypoints_test = []
-    with open(txt_path, 'r') as f:
-        lines = f.readlines()	
-        lines = [line.strip() for line in lines]
-        for line in lines:
-            if 'training' in line:
-                training_flag = True
-                test_flag = False
-                val_flag = False
-            elif 'test' in line:
-                training_flag = False
-                test_flag = True
-                val_flag = False
-            elif 'val' in line:
-                training_flag = False
-                test_flag = False
-                val_flag = True
-            elif training_flag:
-                with h5py.File(line, 'r') as h5_file:
-                    frames = h5_file['frames'][()]
-                    annotations = h5_file['annotations'][()]
-                    if frames.shape[2] > 64:
-                        videos.append(torch.tensor(frames, dtype=torch.float32).to(device))
-                        keypoints.append(torch.tensor(annotations, dtype=torch.float32).to(device))
-            elif val_flag:
-                with h5py.File(line, 'r') as h5_file:
-                    frames = h5_file['frames'][()]
-                    annotations = h5_file['annotations'][()]
-                    if frames.shape[2] > 64:
-                        videos_val.append(torch.tensor(frames, dtype=torch.float32).to(device))
-                        keypoints_val.append(torch.tensor(annotations, dtype=torch.float32).to(device))
-            elif test_flag:
-                with h5py.File(line, 'r') as h5_file:
-                    frames = h5_file['frames'][()]
-                    annotations = h5_file['annotations'][()]
-                    if frames.shape[2] > 64:
-                        videos_test.append(torch.tensor(frames, dtype=torch.float32).to(device))
-                        keypoints_test.append(torch.tensor(annotations, dtype=torch.float32).to(device))
-
-
-    print(f"Number of training videos: {len(videos)}")
-    print(f"Number of validation videos: {len(videos_val)}")
-    print(f"Number of test videos: {len(videos_test)}")
-    if args.loss == 'ordered_distance' or args.loss == 'gaussian':
-        train_dataset = FullSequenceFirstKeypointsDataset(videos, keypoints, transform = args.augm_version)
-    val_dataset = FullSequenceFirstKeypointsDataset(videos_val, keypoints_val)
+    train_dataset = KeypointDataset(args.train_data, filter=True, model_type=args.model, transform=args.augm_version)
+    val_dataset = KeypointDataset(args.val_data, model_type=args.model, filter=True)
     
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, generator=g)
@@ -343,7 +228,7 @@ def main():
 
     # Define model
     if args.model == "U-Net":
-        model = UNet(num_classes=args.num_keypoints, depth=6, start_filts=8, in_channels=2).to(device)
+        model = UNet(num_classes=args.num_keypoints, depth=6, start_filts=8).to(device)
         if args.from_scratch:
             initialize_weights(model)
         else:
@@ -360,6 +245,8 @@ def main():
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    elif args.model == "monai_unet":
+        model = Unet(in_channels=2, out_channels=3, start_filts = 12, depth=6, dropout=0.25, num_residuals=2).to(device)
 
     # Define loss function and optimizer
     if args.loss == 'ordered_distance':

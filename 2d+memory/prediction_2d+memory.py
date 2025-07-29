@@ -10,7 +10,7 @@ import os
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
 from dataloader.dataset_creation_memory import generate_image_with_gaussians
 from models.tasken_unet_with_memory import UNet as Unet_memory
-from models.tasken_unet import UNet
+from models.models import Unet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from postprocessing.indices_calculation import tric_apex_distance_calculation, tapse_calculation, find_parallel_direction
 from postprocessing.kalman_filter import KalmanFilter
@@ -87,8 +87,9 @@ def predict_indices(model, model_memory, test_path, filter=False):
 
         if i != 0:
             model = model_memory
-
-            gaussian_map = generate_image_with_gaussians(256, [coordinates_array[i].tolist()], std=10.0).to(device)
+            print(coordinates_array[i-1].tolist())
+            gaussian_map = generate_image_with_gaussians(256, [coordinates_array[i-1].tolist()], std=10.0).to(device)
+            visualize_image(gaussian_map.squeeze(0).cpu().numpy())
             gaussian_map = gaussian_map.unsqueeze(0).unsqueeze(0)
 
             im = torch.cat((im, gaussian_map), dim=2)
@@ -102,7 +103,7 @@ def predict_indices(model, model_memory, test_path, filter=False):
         coordinates_3 = center_of_mass(output[0, 2].detach())
 
         # if i % 10 == 0:
-        #     visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
+        visualize_image(im[0, 0, 0].cpu().numpy(), [coordinates_1, coordinates_2, coordinates_3])
 
         coordinates_array[i, 0] = coordinates_1
         coordinates_array[i, 1] = coordinates_2
@@ -184,18 +185,20 @@ if __name__ == "__main__":
     h5_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated'
     excel_path = r"D:\mmissana\data/RV_PATIENTS/Results_memory/UNet_memory.xlsx"
 
-    model_checkpoint = r'D:\mmissana\tapse_estimation/2d/runs/Unet_1_channel/best_model.pth'
-    model_checkpoint_memory = r'D:\mmissana\tapse_estimation/2d+memory/runs/Unet_memory_2_channels/best_model.pth'
+    model_checkpoint = r'2d/runs/Best_monai_UNET/best_model.pth'
+    model_checkpoint_memory = r'runs/memory_unet_2_channels_gaussian/best_model.pth'
 
     # Set device to GPU if available
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Initialize and load the trained U-Net model
-    model = UNet(num_classes=3, depth=6, start_filts=8, in_channels = 1).to(device)
-    model_2 = Unet_memory(num_classes=3, depth=6, start_filts=8, in_channels = 2).to(device)
+    model = Unet(in_channels=1, out_channels=3, start_filts = 12, depth=6, dropout=0.25, num_residuals=2).to(device)
+    model_2 = Unet(in_channels=2, out_channels=3, start_filts = 12, depth=6, dropout=0.25, num_residuals=2).to(device)
     model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
     model_2.load_state_dict(torch.load(model_checkpoint_memory, map_location=device)['model_state_dict'])
 
+    model.eval()
+    model_2.eval()
 
     columns = [
         "tapsefw", "tapsesep", "rvfac", "rvad", "rvas",

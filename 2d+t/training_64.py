@@ -13,9 +13,9 @@ import h5py
 from dataloader.main import KeypointDataset
 from dataloader.dataset_creation_sequences_64 import RandomClipDataset, ValidationClipDataset, RandomClipDataset_gaussian_map
 from losses.distances import OrderedDistanceLoss_3d, GaussianKeypointLoss,OrderedDistanceLoss
-from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
-from models.models import EncoderDecoder_3d
+from models.models import EncoderDecoder_3d, Unet_3d
+from models.models import Unet as Unet2D
 from postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
 from dataloader.preprocessing import preprocess_images
 from utils.plot import save_image, visualize_image
@@ -66,7 +66,7 @@ g.manual_seed(args.seed)
 def train_model(model, train_loader, val_loader, criterion, optimizer, num_epochs, patience, checkpoint_path, save_model_path=None):
     model.train()
     early_stopping = EarlyStopping(monitor='val_loss', mode='min', patience=patience, path=checkpoint_path, delta=0.01)
-    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=9, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
+    scheduler = ReduceLROnPlateau(optimizer, monitor='val_loss', mode='min', patience=5, factor=0.3, min_lr=0, initial_lr=args.initial_lr)
 
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
@@ -83,30 +83,27 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
                 # print(masks[0, 1, 0])
                 # print(masks[0, 2, 0])
                 # print(f"Images shape: {images.shape}, Masks shape: {masks.shape}")
-                # for i in range(64):
+                # for i in range(16):
                 #     visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
 
                 # print(images.max(), images.min())
 
                 # print(images.shape)
                 outputs = model(images)  # Forward pass
-                
-                outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
-                # print(f"Outputs shape: {outputs.shape}, masks shape: {masks.shape}")
-                
-
-                # visualize_image(masks[0, 0, 0].cpu().numpy())
-                # visualize_image(outputs[0, 0, 0].cpu().detach().numpy())
+                # print(images.shape, outputs[0].shape)
 
                 if args.loss == 'ordered_distance' or args.loss == 'gaussian':
                     # Compute center of mass for output masks
                     com_tensor = torch.stack([
                         center_of_mass_3d(output, device=device, normalize=False)
                     for output in outputs]).to(device)
+                
+                    # print(com_tensor.shape)
 
                     # print(com_tensor[0,0,0])
                     # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
                     # print(f"com_tensor shape: {com_tensor.shape}, masks shape: {masks.shape}")
+                    com_tensor.permute(1,2,0,3)
                     loss = criterion(com_tensor, masks)
 
 
@@ -152,19 +149,20 @@ def validate(model, val_loader, criterion):
     with torch.no_grad():
         for images, masks in val_loader:
             images, masks = images.to(device), masks.to(device)
+            # for i in range(16):
+            #     visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
             outputs = model(images)
-            print(f"Outputs shape: {outputs.shape}, Masks shape: {masks.shape}")
-            outputs = outputs.permute(0, 2, 1, 3, 4)  # Rearrange dimensions to match masks
-
+            
             # Compute center of mass for output masks
             com_tensor = torch.stack([
                 center_of_mass_3d(output, device=device, normalize=False)
             for output in outputs]).to(device)
 
-            # com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
+            com_tensor = com_tensor.permute(1,2,0,3)
 
             loss = criterion(com_tensor, masks)
             val_loss += loss.item()
+
 
     avg_val_loss = val_loss / len(val_loader)
     return avg_val_loss
@@ -308,19 +306,14 @@ def main():
             initialize_weights(model)
         else:
             model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
+    if args.model == "3d_unet":
+        model = Unet_3d().to(device)
+    if args.model == "2d_unet":
+        model = Unet2D().to(device)
 
 
-    # Define loss function and optimizer
-    if args.loss == 'MSE':
-        criterion = OrderedDistanceLoss() 
-    elif args.loss == 'distance':
-        criterion = UnorderedDistanceLoss()
-    elif args.loss == 'ordered_distance':
+    if args.loss == 'ordered_distance':
         criterion = OrderedDistanceLoss_3d(reduction='mean')
-    elif args.loss == 'gaussian':
-        criterion = GaussianKeypointLoss(sigma = 20)
-    else:
-        criterion = OrderedDistanceLoss()
 
 
 
@@ -357,12 +350,15 @@ def main():
 
             outputs = model(images)
 
+            if args.model == '2d_unet':
+                outputs = outputs.view(1, 16, 3, 256, 256)
+            else:
+                outputs = outputs.permute(0, 2, 1, 3,4)  # Rearrange dimensions to match masks
+
             # Compute center of mass for output masks
             com_tensor = torch.stack([
                 center_of_mass_3d(output, device=device, normalize=False)
             for output in outputs]).to(device)
-
-            com_tensor = com_tensor.permute(0, 2, 1, 3)  # Rearrange dimensions to match masks
 
             for i, im in enumerate(images[0, 0]):
                 im = im.cpu().numpy()

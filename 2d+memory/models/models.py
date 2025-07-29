@@ -152,16 +152,21 @@ class UNETR(nn.Module):
 
 
 class Unet(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels=1, out_channels=3, start_filts = 8, depth=6, dropout=0.0, num_residuals=0):
+        channels = [start_filts * (2 ** i) for i in range(depth)]
+        strides = [2] * (depth)
         super(Unet, self).__init__()
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.channels = channels
+        self.strides = strides
         from monai.networks.nets import UNet as Unet_
-        self.net = Unet_(in_channels=3, out_channels=2, spatial_dims=2, channels=(8, 16, 32, 64, 128, 256),
-                         strides=(1, 1, 1, 1, 1), norm='batch')
+        self.net = Unet_(in_channels=self.in_channels, out_channels=self.out_channels, spatial_dims=2, channels=channels,
+                         strides=strides, norm='batch', dropout=dropout, num_res_units=num_residuals)
 
     def forward(self, x):
         x = x.view(x.shape[0], x.shape[2], x.shape[3], x.shape[4])
         return self.net(x)
-
 
 class ViTAutoencoder(nn.Module):
     def __init__(self):
@@ -218,7 +223,7 @@ class Unet_3d(nn.Module):
     def __init__(self):
         super(Unet_3d, self).__init__()
         from monai.networks.nets import UNet as Unet_
-        self.net = Unet_(in_channels=1, out_channels=2, spatial_dims=3, channels=(8, 16, 32),
+        self.net = Unet_(in_channels=1, out_channels=3, spatial_dims=3, channels=(8, 16, 32),
                          strides=(1, 1, 1, 1, 1), norm='batch')
 
     def forward(self, x):

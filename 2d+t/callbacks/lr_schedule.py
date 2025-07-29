@@ -58,5 +58,5 @@ class ReduceLROnPlateau:
         for param_group in self.optimizer.param_groups:
             new_lr = max(param_group['lr'] * self.factor, self.min_lr)
             param_group['lr'] = new_lr
-            self.currentlr = new_lr
+            self.currentlr = new_lr 
         print(f"Learning rate reduced to {new_lr:.6f}")

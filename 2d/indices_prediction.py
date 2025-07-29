@@ -11,7 +11,7 @@ from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from postprocessing.indices_calculation import tric_apex_distance_calculation, tapse_calculation, find_parallel_direction
 from postprocessing.kalman_filter import KalmanFilter
 from postprocessing.pan_tompkins import pan_tompkins_detector
-from utils.plot import visualize_image
+from utils.plot import visualize_image, save_image
 
 """
 This script processes cardiac ultrasound sequences stored in HDF5 files to estimate 
@@ -21,7 +21,7 @@ for smoothing, calculates indices for each heartbeat, and stores the results in 
 Model parameters and processing options can be customized via command-line arguments.
 """
 
-def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_calc='distance', reduction='max'):
+def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_calc='distance', reduction='max', single_beat = True, patient=None, save_images=False, images_path=None, threshold=0.8):
     """Compute indices from a cardiac HDF5 sequence using a trained segmentation model."""
 
     # Load ultrasound + ECG data
@@ -38,7 +38,7 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
     # Reorient and normalize images
     images = apply_lut(images.transpose(1, 0, 2)[:, ::-1, :])
     images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
-    images = images / 255.0 if images.max() > 1 else images
+    images = images / images.max()
 
     # Detect R-peaks in ECG
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
@@ -50,11 +50,17 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
         im = preprocess_images(np.expand_dims(im, axis=0), model_type='U-Net', device=device)
         output = model(im.float().unsqueeze(0).to(device))
 
-        coords = [center_of_mass(output[0, c].detach(), thresh=0.8) for c in range(3)]
+        coords = [center_of_mass(output[0, c].detach(), thresh=threshold) for c in range(3)]
         for j in range(3):
             coordinates_array[i, j] = coords[j]
 
         # visualize_image(im[0, 0].cpu().numpy(), coords)
+        
+        # Save images with keypoints if required
+        if save_images:
+            save_images_path = os.path.join(images_path, patient)
+            os.makedirs(save_images_path, exist_ok=True)
+            save_image(im[0, 0].cpu().numpy(), points=coords, save_folder=save_images_path)
 
     filtered_array = coordinates_array.copy()
 
@@ -77,19 +83,35 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
     direction = find_parallel_direction(coordinates_array[:, 0]) + find_parallel_direction(coordinates_array[:, 1])
     direction /= np.linalg.norm(direction)
 
-    index_container = np.zeros((len(beat_start) - 1, 17))
-
     # Compute metrics for each beat
-    for i in range(len(beat_start) - 1):
-        window = filtered_array[beat_start[i]:beat_start[i + 1]]
+    if single_beat:
+        index_container = np.zeros((len(beat_start) - 1, 17))
+        for i in range(len(beat_start) - 1):
+            window = filtered_array[beat_start[i]:beat_start[i + 1]]
+            (rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep,
+            rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal) = tric_apex_distance_calculation(
+                window[:, 0], window[:, 1], window[:, 2]
+            )
+
+            tapse_sep, tapse_fw, tapse = tapse_calculation(window[:, 1], window[:, 0], direction, tapse_calc=tapse_calc)
+
+            index_container[i] = [
+                tapse_fw * 1000, tapse_sep * 1000, rvfac, diast_area * 1e4, syst_area * 1e4,
+                rvldfw * 1000, rvldsep * 1000, rvlsfw * 1000, rvlssep * 1000, tadd * 1000,
+                tasd * 1000, rvldmid * 1000, rvlsmid * 1000, rvlsffw, rvlsfglobal,
+                rvlsfsep, rvlsfmid
+            ]
+    else:
+        index_container = np.zeros((1, 17))
+        window = filtered_array
         (rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep,
-         rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal) = tric_apex_distance_calculation(
+        rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal) = tric_apex_distance_calculation(
             window[:, 0], window[:, 1], window[:, 2]
         )
 
         tapse_sep, tapse_fw, tapse = tapse_calculation(window[:, 1], window[:, 0], direction, tapse_calc=tapse_calc)
 
-        index_container[i] = [
+        index_container[0] = [
             tapse_fw * 1000, tapse_sep * 1000, rvfac, diast_area * 1e4, syst_area * 1e4,
             rvldfw * 1000, rvldsep * 1000, rvlsfw * 1000, rvlssep * 1000, tadd * 1000,
             tasd * 1000, rvldmid * 1000, rvlsmid * 1000, rvlsffw, rvlsfglobal,
@@ -111,6 +133,10 @@ def main():
     parser.add_argument('--filter', action='store_true', help='Apply Kalman filter to coordinates')
     parser.add_argument('--tapse', type=str, choices=['distance', 'projection'], default='distance', help='TAPSE calculation method')
     parser.add_argument('--reduction', type=str, choices=['mean', 'max'], default='max', help='Reduction method for multiple beats')
+    parser.add_argument('--single_beat', action='store_true', help='if to calculate indices on single beats or the whole acquisition')
+    parser.add_argument('--images_path', type=str, default=None, help='Path to save images with keypoints (optional)')
+    parser.add_argument('--save_images', action='store_true', help='Save images with keypoints')
+    parser.add_argument('--threshold', type=float, default=0.8, help='Threshold for center of mass detection') # default is 0.8, but must be adjusted based on the threshold used during training
 
     args = parser.parse_args()
 
@@ -142,7 +168,8 @@ def main():
         print(f"Processing: {test_path}")
 
         try:
-            indexes = predict_indices(model, test_path, apply_filter=args.filter, device=device, tapse_calc=args.tapse, reduction=args.reduction)
+            indexes = predict_indices(model, test_path, apply_filter=args.filter, device=device, tapse_calc=args.tapse, reduction=args.reduction, single_beat=args.single_beat,
+                                     patient = path, save_images=args.save_images, images_path=args.images_path, threshold=args.threshold)
             row_idx = df.index[df["path"] == path].tolist()
             if not row_idx:
                 print(f"Path {path} not found in DataFrame.")
@@ -159,4 +186,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

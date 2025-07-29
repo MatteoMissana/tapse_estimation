@@ -10,7 +10,7 @@ from dataloader.preprocessing import resize_or_crop_image_torch
 
 
 class RandomClipDataset(Dataset):
-    def __init__(self, videos, keypoints, clip_length=64, transform=None):
+    def __init__(self, videos, keypoints, clip_length=64, transform=None, num_reps=6):
         """
         videos: list of videos, where each video is a tensor of shape (T, C, H, W)
         clip_length: number of frames per clip (e.g., 64)
@@ -20,11 +20,18 @@ class RandomClipDataset(Dataset):
         self.keypoints = keypoints
         self.clip_length = clip_length
         self.transform = transform
+        self.num_reps = num_reps
 
     def __len__(self):
-        return len(self.videos)
+        return len(self.videos)#*self.num_reps
 
     def __getitem__(self, idx):
+        for i in range(self.num_reps):
+            if idx >= (len(self.videos)*i):
+                new_idx = idx - (len(self.videos)*i)
+
+        idx = new_idx
+        print('index', idx)
         print(self.videos[idx].shape)
         print(self.keypoints[idx].shape)
         video = self.videos[idx]  # Shape: (T, C, H, W)
@@ -95,7 +102,7 @@ class ValidationClipDataset(Dataset):
 
         if clip.shape[1] != 256 or clip.shape[2] != 256:
             clip, keypts = resize_or_crop_image_torch(clip, keypts, target_size=(256, 256))
-        clip, keypts = apply_transform_val(clip, keypts, version=0)
+        # clip, keypts = apply_transform_val(clip, keypts, version=0)
         
         clip = clip.unsqueeze(0)  # Shape: (1, clip_length, C, H, W)
 

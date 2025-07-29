@@ -43,8 +43,10 @@ def center_of_mass_3d(tensor: torch.Tensor, thresh=0.7, device='cpu', normalize=
     Compute the center of mass for a 4D tensor of shape [B, C, H, W].
     Returns a tensor of shape [B, C, 2] with (x, y) coordinates.
     """
+    tensor = tensor.squeeze(0)
+
     if tensor.ndim != 4:
-        raise ValueError("Input tensor must be 4D (B, C, H, W)")
+        raise ValueError("Input tensor must be 4D (B, C, H, W), but received", tensor.shape)
 
     tensor = tensor.float().to(device)
 

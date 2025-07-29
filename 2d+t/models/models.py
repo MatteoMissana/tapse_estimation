@@ -155,7 +155,7 @@ class Unet(nn.Module):
     def __init__(self):
         super(Unet, self).__init__()
         from monai.networks.nets import UNet as Unet_
-        self.net = Unet_(in_channels=3, out_channels=2, spatial_dims=2, channels=(8, 16, 32, 64, 128, 256),
+        self.net = Unet_(in_channels=16, out_channels=16*3, spatial_dims=2, channels=(8, 16, 32, 64, 128, 256),
                          strides=(1, 1, 1, 1, 1), norm='batch')
 
     def forward(self, x):
@@ -218,8 +218,8 @@ class Unet_3d(nn.Module):
     def __init__(self):
         super(Unet_3d, self).__init__()
         from monai.networks.nets import UNet as Unet_
-        self.net = Unet_(in_channels=1, out_channels=2, spatial_dims=3, channels=(8, 16, 32),
-                         strides=(1, 1, 1, 1, 1), norm='batch')
+        self.net = Unet_(in_channels=1, out_channels=3, spatial_dims=3, channels=(2, 4, 8, 16), #it was depth 3 before
+                         strides=(1, 1, 1, 1, 1), norm='batch', dropout=0.25, num_res_units=2)
 
     def forward(self, x):
         return self.net(x)
@@ -243,7 +243,9 @@ class EncoderDecoder_3d(nn.Module):
         self.upconv3 = nn.ConvTranspose3d(128, 64, kernel_size=(3, 3, 3), stride=2, padding=1, output_padding=1)
         self.upconv4 = nn.ConvTranspose3d(64, 64, kernel_size=(3, 3, 3), stride=2, padding=1, output_padding=1)
 
-        self.outconv = nn.ConvTranspose3d(64, self.num_classes, 3, stride=(1, 2, 2), padding=(1, 1, 1), output_padding=(0, 1, 1))
+        self.outconv_0 = nn.ConvTranspose3d(64, 1, 3, stride=(1, 2, 2), padding=(1, 1, 1), output_padding=(0, 1, 1))
+        self.outconv_1 = nn.ConvTranspose3d(64, 1, 3, stride=(1, 2, 2), padding=(1, 1, 1), output_padding=(0, 1, 1))
+        self.outconv_2 = nn.ConvTranspose3d(64, 1, 3, stride=(1, 2, 2), padding=(1, 1, 1), output_padding=(0, 1, 1))
 
     def forward(self, x):
         x = self.resnet(x)
@@ -253,8 +255,10 @@ class EncoderDecoder_3d(nn.Module):
         x = F.relu(self.bn3(self.upconv3(x)))
         x = F.relu(self.bn4(self.upconv4(x)))
 
-        x = self.outconv(x)
+        x0 = self.outconv_0(x)
+        x1 = self.outconv_1(x)
+        x2 = self.outconv_2(x)
 
-        return x
+        return x0, x1, x2
     
 

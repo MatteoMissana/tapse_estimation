@@ -33,8 +33,8 @@ def parse_args():
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
     parser.add_argument('--model', type=str, default='U-Net', help='name of the model: supported "U-Net"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
-    parser.add_argument('--train_data', type=str, default= r'D:\mmissana\data\RV_PATIENTS\dataset_256\train.npz', help='Path to the training dataset')
-    parser.add_argument('--val_data', type=str, default=r'D:\mmissana\data\RV_PATIENTS\dataset_256\val.npz', help='Path to the validation dataset')
+    parser.add_argument('--train_data', type=str, default= r'd:\mmissana\data\RV_PATIENTS\dataset_after_review\train.npz', help='Path to the training dataset')
+    parser.add_argument('--val_data', type=str, default=r'd:\mmissana\data\RV_PATIENTS\dataset_after_review\val.npz', help='Path to the validation dataset')
     parser.add_argument('--batch_size', type=int, default=16, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--model_path', type=str, default='dl_mapse/Data/best_loss_weights_unet_light.pth', help='Path to the pre-trained model weights')
@@ -84,6 +84,9 @@ def train_model(model, train_loader, val_loader, criterion, optimizer, num_epoch
         with tqdm(total=len(train_loader), desc=f"Training Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
             for images, masks in train_loader:
                 images, masks = images.to(device), masks.to(device)
+                # print(masks.shape)  # Debugging line to check shapes
+                # print(images.max(), images.min())  # Debugging line to check image values
+                # visualize_image(images[0, 0, 0].cpu().numpy(), points=tuple(masks[0].cpu().numpy()))  # Visualize first image and its keypoints
                 optimizer.zero_grad()
 
                 outputs = model(images)  # Forward pass	
@@ -170,12 +173,12 @@ class Tester:
         criterion2 (callable): Second loss function.
     """
     
-    def __init__(self, criterion1, criterion2, thresh=0.9):
+    def _init_(self, criterion1, criterion2, thresh=0.9):
         self.criterion1 = criterion1
         self.criterion2 = criterion2
         self.thresh = thresh
     
-    def __call__(self, model, test_loader, device):
+    def _call_(self, model, test_loader, device):
         """
         Runs evaluation on the validation set and computes two metrics.
 
@@ -223,7 +226,7 @@ def main():
     wandb.init(
         project=args.wandb_project,
         entity=args.wandb_entity,
-        name=f"{args.model}_{args.loss}_augm_{args.augm_version}",  # Set a meaningful run name
+        name=f"{args.model}{args.loss}_augm{args.augm_version}",  # Set a meaningful run name
         config={
             "epochs": args.epochs,
             "batch_size": args.batch_size,
@@ -316,7 +319,7 @@ def main():
 
     # Run inference on test set
     model.eval()
-    test_path = r'D:\mmissana\data\RV_PATIENTS\dataset_256\test.npz'
+    test_path = r'd:\mmissana\data\RV_PATIENTS\dataset_after_review\test.npz'
     test_dataset = KeypointDataset(test_path, filter=True, model_type=args.model)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 

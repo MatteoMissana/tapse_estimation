@@ -106,8 +106,8 @@ def visualize_dataset(dataset_path):
         plt.imshow(images[idx, :, :], cmap='gray')  # Display the image
         
         # Plot annotations
-        for j in range(2):
-            plt.scatter(keypoints[idx][j][0], keypoints[idx][j][1], 
+        for j in range(3):
+            plt.scatter(keypoints[idx][j][0], keypoints[idx][j][1],
                         color='r', marker='*', s=100)  # Annotations
         
         plt.title(f"image {idx + 1}/{num_images}")
@@ -117,6 +117,6 @@ def visualize_dataset(dataset_path):
     plt.show()
 
 if __name__ == "__main__":
-    dataset_path = 'data/dataset_256/test.npz'
+    dataset_path = r'd:\mmissana\data\RV_PATIENTS\dataset_after_review\test.npz'
     visualize_dataset(dataset_path)
 
