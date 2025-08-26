@@ -21,7 +21,7 @@ for smoothing, calculates indices for each heartbeat, and stores the results in 
 Model parameters and processing options can be customized via command-line arguments.
 """
 
-def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_calc='distance', reduction='max', single_beat = True, patient=None, save_images=False, images_path=None, threshold=0.8):
+def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_calc='distance', reduction='max', single_beat = True, patient=None, save_images=False, images_path=None, threshold=0.8, two_dimensional=True):
     """Compute indices from a cardiac HDF5 sequence using a trained segmentation model."""
 
     # Load ultrasound + ECG data
@@ -36,9 +36,14 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
     dt = images_times[1] - images_times[0]  # Image frame interval
 
     # Reorient and normalize images
-    images = apply_lut(images.transpose(1, 0, 2)[:, ::-1, :])
-    images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
-    images = images / images.max()
+    if two_dimensional:
+        images = apply_lut(images.transpose(1, 0, 2)[:, ::-1, :])
+        images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
+        images = images / images.max()
+    else:
+        images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
+        images = images / images.max()
+    visualize_image(images[0])
 
     # Detect R-peaks in ECG
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
@@ -58,7 +63,7 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
         
         # Save images with keypoints if required
         if save_images:
-            save_images_path = os.path.join(images_path, patient)
+            save_images_path = os.path.join(images_path, str(patient))
             os.makedirs(save_images_path, exist_ok=True)
             save_image(im[0, 0].cpu().numpy(), points=coords, save_folder=save_images_path)
 
@@ -137,6 +142,7 @@ def main():
     parser.add_argument('--images_path', type=str, default=None, help='Path to save images with keypoints (optional)')
     parser.add_argument('--save_images', action='store_true', help='Save images with keypoints')
     parser.add_argument('--threshold', type=float, default=0.8, help='Threshold for center of mass detection') # default is 0.8, but must be adjusted based on the threshold used during training
+    parser.add_argument('--two_dimensional', action='store_true', help='whether the images are 2d or 3d derived')
 
     args = parser.parse_args()
 
@@ -164,12 +170,12 @@ def main():
     model.eval()
 
     for path in paths:
-        test_path = os.path.join(args.h5_dir, path + ".h5")
+        test_path = os.path.join(args.h5_dir, str(path) + ".h5")
         print(f"Processing: {test_path}")
 
         try:
             indexes = predict_indices(model, test_path, apply_filter=args.filter, device=device, tapse_calc=args.tapse, reduction=args.reduction, single_beat=args.single_beat,
-                                     patient = path, save_images=args.save_images, images_path=args.images_path, threshold=args.threshold)
+                                     patient = path, save_images=args.save_images, images_path=args.images_path, threshold=args.threshold, two_dimensional=args.two_dimensional)
             row_idx = df.index[df["path"] == path].tolist()
             if not row_idx:
                 print(f"Path {path} not found in DataFrame.")
