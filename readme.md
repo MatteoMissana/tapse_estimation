@@ -24,4 +24,5 @@ To derive these, the approach consists of predicting three anatomical landmarks 
 ## Main Scripts
 
 | Script | Description |
-|--------|-------------|
+|----------|-----------|
+| `2d/training.py` | Performs training for the 2D pipeline. Refer to the script for detailed information on arguments, model definitions, and training logic. |
