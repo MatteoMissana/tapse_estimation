@@ -105,7 +105,17 @@ def process_h5_file_batched(
 
             if save_images:
                 keypoints = [tuple(coordinates_array[start + i, k]) for k in range(3)]
-                save_image(batch_pre[i, 0].cpu().numpy(), points=keypoints, save_folder=save_path)
+
+                bold_flag = False
+                if prediction_stats:  
+                    # error calculation
+                    dists = np.linalg.norm(coordinates_array[start + i] - annotations[start + i], axis=-1)  # shape (3,)
+                    if np.any(dists > 40):
+                        bold_flag = True
+                        print(f"[WARNING] Error > 40  in image {start + i} of file {file_path}")
+
+                save_image(batch_pre[i, 0].cpu().numpy(), points=keypoints, save_folder=save_path, bold=bold_flag)
+
     
     if prediction_stats:
         stats, distances = compute_keypoint_distance_stats(coordinates_array, annotations)
@@ -114,13 +124,16 @@ def process_h5_file_batched(
     return coordinates_array, None, None
 
 def main():
-    model_checkpoint = r'2d/runs/Best_monai_UNET_reviewed_777/best_model.pth'
-    test_path = r'd:\mmissana\data\RV_PATIENTS\test_set_annotated_files'
-    save_model_path = r'2d/best_results_after_review/unet_777/predictions'
+    model_checkpoint = r'2d/runs/best_unet/best_model.pth'
+    test_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
+    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\predictions_boxplots'
+
+    if not os.path.exists(save_model_path):
+        os.makedirs(save_model_path)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    model = Unet(depth=6, start_filts=12, num_residuals=2).to(device)
+    model = Unet(depth=6, start_filts=16, num_residuals=0).to(device)
     model.load_state_dict(torch.load(model_checkpoint, map_location=device)['model_state_dict'])
 
     stats_list = []
@@ -130,44 +143,45 @@ def main():
 
     for folder in os.listdir(test_path):
         folder_path = os.path.join(test_path, folder)
-        for file in os.listdir(folder_path):
-            if 'interpolated' in file:
-                file_path = os.path.join(folder_path, file)
+        if folder in ['100', '111', '140', '149', '160', '170', '190', '198', '199', '920']:  # test set
+            for file in os.listdir(folder_path):
+                if 'interpolated' in file:
+                    file_path = os.path.join(folder_path, file)
 
-                coordinates_array, stats, distances = process_h5_file_batched(
-                    file_path=file_path,
-                    model=model,
-                    device=device,
-                    save_model_path=save_model_path,
-                    folder=folder,
-                    save_images=False,
-                    batch_size=64,
-                    prediction_stats=True  
-                )
+                    coordinates_array, stats, distances = process_h5_file_batched(
+                        file_path=file_path,
+                        model=model,
+                        device=device,
+                        save_model_path=save_model_path,
+                        folder=folder,
+                        save_images=True,
+                        batch_size=64,
+                        prediction_stats=True  
+                    )
 
-                # Append distances to full list with keypoint index labels
-                for i in range(3):
-                    for d in distances[:, i]:
-                        all_distances.append({'file': f"{folder}/{file}", 'kp': keypoint_names[i], 'distance': d})
+                    # Append distances to full list with keypoint index labels
+                    for i in range(3):
+                        for d in distances[:, i]:
+                            all_distances.append({'file': f"{folder}/{file}", 'kp': keypoint_names[i], 'distance': d})
 
-                # Flatten the stats dict for DataFrame
-                row = {
-                    "file": f"{folder}/{file}",
-                    "mean_global": stats['global']['mean'],
-                    "max_global": stats['global']['max'],
-                    "min_global": stats['global']['min'],
-                    "std_global": stats['global']['std'],
-                }
+                    # Flatten the stats dict for DataFrame
+                    row = {
+                        "file": f"{folder}/{file}",
+                        "mean_global": stats['global']['mean'],
+                        "max_global": stats['global']['max'],
+                        "min_global": stats['global']['min'],
+                        "std_global": stats['global']['std'],
+                    }
 
-                for i, kp_stats in enumerate(stats['per_point']):
-                    row.update({
-                        f"mean_kp{i}": kp_stats['mean'],
-                        f"max_kp{i}": kp_stats['max'],
-                        f"min_kp{i}": kp_stats['min'],
-                        f"std_kp{i}": kp_stats['std'],
-                    })
+                    for i, kp_stats in enumerate(stats['per_point']):
+                        row.update({
+                            f"mean_kp{i}": kp_stats['mean'],
+                            f"max_kp{i}": kp_stats['max'],
+                            f"min_kp{i}": kp_stats['min'],
+                            f"std_kp{i}": kp_stats['std'],
+                        })
 
-                stats_list.append(row)
+                    stats_list.append(row)
 
     # Create DataFrame
     df = pd.DataFrame(stats_list)

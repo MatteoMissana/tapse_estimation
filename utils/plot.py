@@ -189,7 +189,7 @@ def visualize_image(image, points=None):
         plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
     plt.show()
 
-def save_image(image, points=None, save_folder="visualizations"):
+def save_image(image, points=None, save_folder="visualizations", bold=False):
     """
     Saves a 2D image with optional points highlighted to a specified folder.
     If the image is a CuPy array, it is converted to a NumPy array.
@@ -219,10 +219,13 @@ def save_image(image, points=None, save_folder="visualizations"):
     # If points are provided, plot them in red
     if points:
         points = np.array(points)
-        plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
+        if bold:
+            for x, y in points:
+                circle = plt.Circle((x, y), radius=4, color='red', fill=True)  # fill=True per cerchi pieni
+                plt.gca().add_patch(circle)
+        else:
+            plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
     
     # Save the image
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
     plt.close()  # Close the plot to avoid displaying it in an interactive session
-    
-    print(f"Image saved to {save_path}")

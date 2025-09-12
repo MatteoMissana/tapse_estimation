@@ -21,7 +21,21 @@ for smoothing, calculates indices for each heartbeat, and stores the results in 
 Model parameters and processing options can be customized via command-line arguments.
 """
 
-def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_calc='distance', reduction='max', single_beat = True, patient=None, save_images=False, images_path=None, threshold=0.8, two_dimensional=True):
+def predict_indices(model, 
+                    test_path, 
+                    apply_filter=True, 
+                    device='cpu',
+                    tapse_calc='distance', 
+                    reduction='max', 
+                    single_beat = True, 
+                    patient=None, 
+                    save_images=False, 
+                    images_path=None, 
+                    threshold=0.8, 
+                    two_dimensional=True, 
+                    count_beats=False,
+                    area_method = 'triangle',
+                    ):
     """Compute indices from a cardiac HDF5 sequence using a trained segmentation model."""
 
     # Load ultrasound + ECG data
@@ -43,10 +57,12 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
     else:
         images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
         images = images / images.max()
-    visualize_image(images[0])
+
 
     # Detect R-peaks in ECG
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
+    if count_beats:
+        print(f"Aquisition of patient {patient} has {len(r_peaks)-1} detected heartbeats.")
     beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in r_peaks]
 
     # Inference loop
@@ -65,7 +81,7 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
         if save_images:
             save_images_path = os.path.join(images_path, str(patient))
             os.makedirs(save_images_path, exist_ok=True)
-            save_image(im[0, 0].cpu().numpy(), points=coords, save_folder=save_images_path)
+            save_image(im[0, 0].cpu().numpy(), points=coords, save_folder=save_images_path,  bold = True)
 
     filtered_array = coordinates_array.copy()
 
@@ -95,7 +111,7 @@ def predict_indices(model, test_path, apply_filter=True, device='cpu', tapse_cal
             window = filtered_array[beat_start[i]:beat_start[i + 1]]
             (rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep,
             rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal) = tric_apex_distance_calculation(
-                window[:, 0], window[:, 1], window[:, 2]
+                window[:, 0], window[:, 1], window[:, 2], method = area_method
             )
 
             tapse_sep, tapse_fw, tapse = tapse_calculation(window[:, 1], window[:, 0], direction, tapse_calc=tapse_calc)
@@ -143,6 +159,8 @@ def main():
     parser.add_argument('--save_images', action='store_true', help='Save images with keypoints')
     parser.add_argument('--threshold', type=float, default=0.8, help='Threshold for center of mass detection') # default is 0.8, but must be adjusted based on the threshold used during training
     parser.add_argument('--two_dimensional', action='store_true', help='whether the images are 2d or 3d derived')
+    parser.add_argument('--count_beats', action='store_true', help='Print number of detected heartbeats')
+    parser.add_argument('--area_method', type=str, choices=['triangle', 'spline'], default='triangle', help='how to calculate the area inside the triangle')
 
     args = parser.parse_args()
 
@@ -174,8 +192,21 @@ def main():
         print(f"Processing: {test_path}")
 
         try:
-            indexes = predict_indices(model, test_path, apply_filter=args.filter, device=device, tapse_calc=args.tapse, reduction=args.reduction, single_beat=args.single_beat,
-                                     patient = path, save_images=args.save_images, images_path=args.images_path, threshold=args.threshold, two_dimensional=args.two_dimensional)
+            indexes = predict_indices(model, 
+                                      test_path, 
+                                      apply_filter=args.filter, 
+                                      device=device, 
+                                      tapse_calc=args.tapse, 
+                                      reduction=args.reduction, 
+                                      single_beat=args.single_beat,
+                                      patient = path, 
+                                      save_images=args.save_images, 
+                                      images_path=args.images_path, 
+                                      threshold=args.threshold, 
+                                      two_dimensional=args.two_dimensional, 
+                                      count_beats=args.count_beats,
+                                      area_method = args.area_method)
+            
             row_idx = df.index[df["path"] == path].tolist()
             if not row_idx:
                 print(f"Path {path} not found in DataFrame.")

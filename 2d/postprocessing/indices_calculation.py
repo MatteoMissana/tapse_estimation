@@ -2,41 +2,69 @@ import cupy as cp
 import numpy as np
 import torch
 from numpy.polynomial import polynomial as poly
+import numpy as np
+from scipy import interpolate
 
-def tric_apex_distance_calculation(free_wall, septum, apex):
+def tric_apex_distance_calculation(free_wall, septum, apex, method="triangle"):
     """
     Calculate the distance from the apex to the free wall and septum.
-    also calculates the diameter of the right ventricle, and the area of the triangle defined by those three points.
-    the output arrays are of the same lenght as the input, with the measure calculated for each time interval"""
+    Also calculates the diameter of the right ventricle, and the area of the region
+    defined by those three points.
+    
+    Parameters
+    ----------
+    free_wall, septum, apex : ndarray (..., 2)
+        Coordinates of the free wall, septum, and apex at each time point.
+    method : str, optional
+        'triangle' (Heron's formula) or 'spline' (area under spline through points).
+    
+    Returns
+    -------
+    rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep,
+    rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal
+    """
 
     midpoint = (free_wall + septum) / 2
 
-    # Compute distances (Euclidean norm, along last axis)
-    dist_0 = np.linalg.norm(free_wall - apex, ord=2, axis=-1)
-    dist_1 = np.linalg.norm(septum - apex, ord=2, axis=-1)
-    dist_2 = np.linalg.norm(midpoint - apex, ord=2, axis=-1)
+    # Distances from apex
+    dist_0 = np.linalg.norm(free_wall - apex, axis=-1)
+    dist_1 = np.linalg.norm(septum - apex, axis=-1)
+    dist_2 = np.linalg.norm(midpoint - apex, axis=-1)
 
+    diameter = np.linalg.norm(free_wall - septum, axis=-1)
 
-    diameter = np.linalg.norm(free_wall - septum, ord=2, axis=-1)
+    if method == "triangle": # calculate the RV area as the area inside the triangle
+        semiperimeter = (dist_0 + dist_1 + diameter) / 2
+        area = np.sqrt(
+            semiperimeter
+            * (semiperimeter - dist_0)
+            * (semiperimeter - dist_1)
+            * (semiperimeter - diameter)
+        )
+    elif method == "spline": # calculate the RV area as the area inside the spline through the three points
+        area = []
+        for fw, ap, sp in zip(free_wall, apex, septum):
+            # Order points (close loop)
+            pts = np.vstack([fw, ap, sp, fw])
+            t = np.arange(len(pts))
 
-    semiperimeter = (dist_0 + dist_1 + diameter) / 2
-    # Area using Heron's formula
-    area = np.sqrt(
-        semiperimeter
-        * (semiperimeter - dist_0)
-        * (semiperimeter - dist_1)
-        * (semiperimeter - diameter)
-    )
+            # Parametric spline
+            tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
+            u_new = np.linspace(0, 1, 6)
+            x_new, y_new = interpolate.splev(u_new, tck)
+
+            # Shoelace formula
+            poly = np.vstack([x_new, y_new]).T
+            area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
+                                np.dot(poly[:,1], np.roll(poly[:,0], -1)))
+            area.append(area_i)
+        area = np.array(area)
+    else:
+        raise ValueError("method must be 'triangle' or 'spline'")
 
     diast_area = area.max()
     syst_area = area.min()
-
-    # calculate rvfac surrogate
     rvfac = (diast_area - syst_area) / diast_area * 100
-
-
-
-    
 
     rvldfw = dist_0.max()
     rvldsep = dist_1.max()
@@ -50,12 +78,12 @@ def tric_apex_distance_calculation(free_wall, septum, apex):
     rvlsfmid = (rvldmid - rvlsmid)/ rvldmid * 100
     rvlsfglobal = ((rvldfw+rvldsep)-(rvlsfw+rvlssep))/(rvldfw+rvldsep) * 100
 
-    tadd = diameter.max() 
+    tadd = diameter.max()
     tasd = diameter.min()
 
-
-
-    return rvfac, diast_area, syst_area, rvldfw, rvldsep, rvlsfw, rvlssep, rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal
+    return (rvfac, diast_area, syst_area, rvldfw, rvldsep,
+            rvlsfw, rvlssep, rvldmid, rvlsmid, tadd, tasd,
+            rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal)
 
 def tapse_calculation(
     coordinates_septum: np.ndarray,
@@ -113,6 +141,5 @@ def find_parallel_direction(points):
 
     # Normalize to get the versor
     versor = v / np.linalg.norm(v)
-    print("versor", versor)
     
     return versor

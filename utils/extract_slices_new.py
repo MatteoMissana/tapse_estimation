@@ -7,16 +7,16 @@ from utils.extract_slices import slice_volume_z, signed_angle_between_vectors_gp
 from cupyx.scipy.ndimage import rotate
 
 def plane_from_points(p1, p2, p3):
-    """Trova l'equazione del piano ax + by + cz + d = 0 passante per tre punti."""
+    """Find the equation of the plane ax + by + cz + d = 0 passing through three points."""
     v1, v2 = cp.array(p2) - cp.array(p1), cp.array(p3) - cp.array(p1)
-    normal = cp.cross(v1, v2)  # Normale al piano
+    normal = cp.cross(v1, v2)  # Plane normal
 
-    # Verifica che la normale non sia nulla
+    # Check that the normal is not zero
     if cp.linalg.norm(normal) == 0:
-        raise ValueError("I tre punti sono collineari e non definiscono un piano valido.")
+        raise ValueError("The three points are collinear and do not define a valid plane.")
 
-    normal = normal / cp.linalg.norm(normal)  # Normalizziamo la normale
-    d = -cp.dot(normal, p1)  # Termine noto
+    normal = normal / cp.linalg.norm(normal)  # Normalize the normal
+    d = -cp.dot(normal, p1)  # Constant term
     return normal, d
 
 def extract_from_hdf5(file_path, save_path, degrees, first, second, third, center = np.array([-0.019,-0.077,-0.002])):
@@ -72,7 +72,7 @@ def extract_from_hdf5(file_path, save_path, degrees, first, second, third, cente
 
 
         def rotate_vol_given_axis(axis, volume, center):
-            # Calcolo degli angoli di rotazione in base alle proiezioni dell'asse
+            # Compute rotation angles based on axis projections
             axis_xz = axis.copy()
             axis_xz[1] = 0
             axis_xz = axis_xz / cp.linalg.norm(axis_xz)
@@ -84,57 +84,57 @@ def extract_from_hdf5(file_path, save_path, degrees, first, second, third, cente
             alpha_xz = signed_angle_between_vectors_gpu(axis_xz)
             alpha_yz = signed_angle_between_vectors_gpu(axis_yz)
             
-            # --- Prima rotazione: piano (1,2) ---
+            # --- First rotation: plane (1,2) ---
             volume_rotatedx = rotate(volume, -alpha_xz, axes=(1,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
             
-            # Calcolo del centro di rotazione per il piano (1,2)
+            # Compute the rotation center for the plane (1,2)
             orig_shape = volume.shape
             new_shape_x = volume_rotatedx.shape
             
-            # Centro geometrico del piano (1,2) nell'array originale e ruotato
+            # Geometric center of plane (1,2) in original and rotated array
             orig_center_yz = cp.array([(orig_shape[1] - 1) / 2.0, (orig_shape[2] - 1) / 2.0])
             new_center_yz = cp.array([(new_shape_x[1] - 1) / 2.0, (new_shape_x[2] - 1) / 2.0])
             
-            # Estrae le coordinate (y,z) del centro di interesse
+            # Extract coordinates (y,z) of the point of interest
             pt_yz = center[1:3]
             
-            # Matrice di rotazione 2D per l'angolo alpha_xz
+            # 2D rotation matrix for angle alpha_xz
             cos1 = cp.cos(-alpha_xz)
             sin1 = cp.sin(-alpha_xz)
             R1 = cp.array([[cos1, -sin1],
                         [sin1,  cos1]])
             
-            # Calcolo delle nuove coordinate nel piano (1,2)
+            # Compute new coordinates in plane (1,2)
             pt_yz_rot = R1 @ (pt_yz - orig_center_yz) + new_center_yz
             
-            # La coordinata lungo l'asse 0 non cambia in questa rotazione.
+            # Coordinate along axis 0 does not change in this rotation
             center_after_first = cp.array([center[0], pt_yz_rot[0], pt_yz_rot[1]])
             
-            # --- Seconda rotazione: piano (0,2) ---
+            # --- Second rotation: plane (0,2) ---
             volume_rotatedy = rotate(volume_rotatedx, -alpha_yz, axes=(0,2), reshape=True, 
                                     order=3, mode='constant', cval=0.0, prefilter=True)
             
-            # Calcolo del centro per il piano (0,2)
+            # Compute the rotation center for plane (0,2)
             shape_after_first = volume_rotatedx.shape
             shape_final = volume_rotatedy.shape
             
             orig_center_0_2 = cp.array([(shape_after_first[0] - 1) / 2.0, (shape_after_first[2] - 1) / 2.0])
             new_center_0_2 = cp.array([(shape_final[0] - 1) / 2.0, (shape_final[2] - 1) / 2.0])
             
-            # Prendi le coordinate (0,2) dal centro dopo la prima rotazione
+            # Take coordinates (0,2) from the center after the first rotation
             pt_0_2 = cp.array([center_after_first[0], center_after_first[2]])
             
-            # Matrice di rotazione 2D per l'angolo -alpha_yz
+            # 2D rotation matrix for angle -alpha_yz
             cos2 = cp.cos(-alpha_yz)
             sin2 = cp.sin(-alpha_yz)
             R2 = cp.array([[cos2, -sin2],
                         [sin2,  cos2]])
             
-            # Calcolo delle nuove coordinate nel piano (0,2)
+            # Compute new coordinates in plane (0,2)
             pt_0_2_rot = R2 @ (pt_0_2 - orig_center_0_2) + new_center_0_2
             
-            # La coordinata lungo l'asse 1 rimane invariata in questa rotazione
+            # Coordinate along axis 1 remains unchanged in this rotation
             center_final = cp.array([pt_0_2_rot[0], center_after_first[1], pt_0_2_rot[1]])
 
             
@@ -150,6 +150,8 @@ def extract_from_hdf5(file_path, save_path, degrees, first, second, third, cente
         viewer = VolumeViewer(volume_rotated)
         viewer.show()
 
+        print("Please click on the target point in the viewer window and close it.")
+        # Wait for user to click and close the viewer
         target_x = viewer.clicked_points[0][1]
         target_y = viewer.clicked_points[0][0]
 
