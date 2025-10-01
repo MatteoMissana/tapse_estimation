@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 from scipy.stats import pearsonr, spearmanr
+import argparse
 
 def analysis(manual_path, automatic_path, patient_ids, save_path=None):
     annotations = pd.read_excel(manual_path)
@@ -11,6 +12,10 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
     predictions = predictions[predictions['id'].isin(patient_ids)]
 
     merged = pd.merge(annotations, predictions, on='id', suffixes=('_ann', '_pred'))
+
+    if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns):
+        merged['rvfac_pred'] = (merged['rvad_pred'] - merged['rvas_pred']) / merged['rvad_pred'] * 100
+        print("RVFACpred calculated and added to DataFrame.")
 
     index_columns = [col for col in predictions.columns if col not in ['id', 'path']]
 
@@ -212,10 +217,15 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Bland-Altman analysis")
+    parser.add_argument("--automatic_path", required=True, help="Path to automatic predictions Excel file")
+    args = parser.parse_args()
+
+
     manual_path = r"D:\mmissana\data/RV_PATIENTS/090525_Yu_manua_2D_and_3D_RV_TEE.xlsx"
-    automatic_path = r"2d/results/best_unet_filter_distance_max_spline/best_unet.xlsx"
+    # automatic_path = r"2d/results/best_unet_filter_distance_max_spline/best_unet.xlsx"
     # patient_ids = [140, 141, 149, 160, 170, 184, 190, 198      , 100, 106, 111, 135, 199, 920]  # First ones are the one im sure of, other are the ones that weren't annotated
     # patient_ids = [140, 141, 149, 160, 170, 190, 198      , 100, 111, 199, 920]  # patients ids list (excluded the patients that jinyang told us to exclude)
-    patient_ids = [100, 111, 140, 149, 160, 170, 190, 198, 199, 920] 
-    save_path = automatic_path.replace('/best_unet.xlsx', '')
-    analysis(manual_path, automatic_path, patient_ids, save_path)
+    patient_ids = [100, 111, 140, 149, 160, 170, 190, 198, 199, 920]
+    save_path = args.automatic_path.replace('best_unet.xlsx', '')
+    analysis(manual_path, args.automatic_path, patient_ids, save_path)
