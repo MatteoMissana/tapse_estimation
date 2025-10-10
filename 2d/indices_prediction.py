@@ -37,6 +37,7 @@ def predict_indices(model,
                     best_combination = False,
                     no_sudden_movements = False,
                     threshold_sudden = 20,
+                    best_rvlsffw = False
                     ):
     """Compute indices from a cardiac HDF5 sequence using a trained segmentation model."""
 
@@ -169,8 +170,8 @@ def predict_indices(model,
             tapse_fw, 
             tapse) = tapse_calculation(window[:, 1], 
                                     window[:, 0], 
-                                    window_unfiltered[:, 0], 
                                     window_unfiltered[:, 1], 
+                                    window_unfiltered[:, 0], 
                                     tapse_calc=tapse_calc,
                                     direction=direction,
                                     filter = apply_filter,
@@ -196,8 +197,6 @@ def predict_indices(model,
             rvlsfmid
         ]
 
-        print(index_container.shape)
-
     if reduction == 'mean' and not best_combination:
          return index_container.mean(axis=0)
     elif reduction == 'max' and not best_combination:
@@ -207,9 +206,11 @@ def predict_indices(model,
     elif best_combination:
         result = []
         for i in range(index_container.shape[1]):
-            if i in [0]:
+            if i in [5,6] and best_rvlsffw:
+                result.append(index_container[:, i].max())
+            elif i in [0, 8]:
                 result.append(index_container[:, i].mean())
-            elif i in [1, 3]:
+            elif i in [1, 6, 10]:
                 result.append(index_container[:, i].max())
             else:
                 result.append(index_container[:, i].min())
@@ -238,6 +239,8 @@ def main():
     parser.add_argument('--best_combination', action='store_true', help='Use best combination of parameters found (overrides other parameters)')
     parser.add_argument('--no_sudden_movements', action='store_true', help='Flag to avoid sudden movements in keypoints (not implemented yet)')
     parser.add_argument('--threshold_sudden', type=int, default=20, help='Threshold for sudden movement detection')
+    parser.add_argument('--best_rvlsffw', action='store_true', help='if the overestimate rvldfw, so that rvlsffw is more similar to the manual one. ' \
+    'Then rvlsffw has to be recalculated as (rvldfw - rvlsfw)/rvldfw*100 from the excel results in the statistical analysis script. Use it in combination with --best_combination.')
     args = parser.parse_args()
 
     columns = [
@@ -282,21 +285,22 @@ def main():
 
         try:
             indexes = predict_indices(model, 
-                                      test_path, 
-                                      apply_filter=args.filter, 
-                                      device=device, 
-                                      tapse_calc=args.tapse, 
-                                      reduction=args.reduction, 
-                                      patient = path, 
-                                      save_images=args.save_images, 
-                                      images_path=args.images_path, 
-                                      threshold=args.threshold, 
-                                      two_dimensional=args.two_dimensional, 
-                                      count_beats=args.count_beats,
-                                      area_method = args.area_method,
-                                      best_combination = args.best_combination,
-                                      no_sudden_movements = args.no_sudden_movements,
-                                      threshold_sudden = args.threshold_sudden,
+                                        test_path, 
+                                        apply_filter=args.filter, 
+                                        device=device, 
+                                        tapse_calc=args.tapse, 
+                                        reduction=args.reduction, 
+                                        patient = path, 
+                                        save_images=args.save_images, 
+                                        images_path=args.images_path, 
+                                        threshold=args.threshold, 
+                                        two_dimensional=args.two_dimensional, 
+                                        count_beats=args.count_beats,
+                                        area_method = args.area_method,
+                                        best_combination = args.best_combination,
+                                        no_sudden_movements = args.no_sudden_movements,
+                                        threshold_sudden = args.threshold_sudden,
+                                        best_rvlsffw = args.best_rvlsffw
                                       ) # function that predicts indexes froom the h5 file
             
             row_idx = df.index[df["path"] == path].tolist()

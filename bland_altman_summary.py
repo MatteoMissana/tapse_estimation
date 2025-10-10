@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-base_dir = r"2d/results_no_sudden_movement_4_pixels"
+base_dir = r"2d/results"
 targets = [
     "tapsefw", "tapsesep", "rvfac", "rvad", "rvas", "rvldfw", "rvldsep",
     "rvlsfw", "rvlssep", "tadd", "tasd", "rvldmid", "rvlsmid",

@@ -269,13 +269,17 @@ def tric_apex_distance_calculation(free_wall_filtered,
 
         # Distances from apex
         dist_0 = np.linalg.norm(free_wall_filtered - apex_filtered, axis=-1)
+        dist_0_unfiltered = np.linalg.norm(free_wall - apex, axis=-1)
         dist_1 = np.linalg.norm(septum_filtered - apex_filtered, axis=-1)
+        dist_1_unfiltered = np.linalg.norm(septum - apex, axis=-1)
         dist_2 = np.linalg.norm(midpoint - apex_filtered, axis=-1)
+        dist_2_unfiltered = np.linalg.norm(midpoint - apex, axis=-1)
 
         diameter = np.linalg.norm(free_wall_filtered - septum_filtered, axis=-1)
 
         area_diastole = []
         area_systole = []
+        area_diastole_rvfac = [] # for the calculation of rvfac, since I'm underestimating the systolic area, i prefer to underestimate also the diastolic area
         for fw, ap, sp in zip(free_wall_filtered, apex_filtered, septum_filtered): #loop for diastolic area calculation
             # Order points (close loop)
             pts = np.vstack([fw, ap, sp, fw])
@@ -293,6 +297,24 @@ def tric_apex_distance_calculation(free_wall_filtered,
                                 np.dot(poly[:,1], np.roll(poly[:,0], -1)))
             area_diastole.append(area_i)
         area_diastole = np.array(area_diastole)
+
+        for fw, ap, sp in zip(free_wall_filtered, apex_filtered, septum_filtered): #loop for diastolic area calculation
+            # Order points (close loop)
+            pts = np.vstack([fw, ap, sp, fw])
+            t = np.arange(len(pts))
+
+            # Parametric spline
+            tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
+            u_new = np.linspace(0, 1, 9)
+            x_new, y_new = interpolate.splev(u_new, tck)
+
+            # Shoelace formula
+            poly = np.vstack([x_new, y_new]).T
+
+            area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
+                                np.dot(poly[:,1], np.roll(poly[:,0], -1)))
+            area_diastole_rvfac.append(area_i)
+        area_diastole_rvfac = np.array(area_diastole_rvfac)
         
         for fw, ap, sp in zip(free_wall, apex, septum): # loop for systole area calculation
             # Order points (close loop)
@@ -307,15 +329,6 @@ def tric_apex_distance_calculation(free_wall_filtered,
             # Shoelace formula
             poly = np.vstack([x_new, y_new]).T
 
-            # plt.figure()
-            # plt.plot(poly[:,0], poly[:,1], 'o-', label="Spline polygon")
-            # plt.plot([fw[0], ap[0], sp[0], fw[0]],
-            #         [fw[1], ap[1], sp[1], fw[1]], 'r--', label="Triangle")
-            # plt.scatter([fw[0], ap[0], sp[0]], [fw[1], ap[1], sp[1]], c='k', zorder=5)
-            # plt.axis('equal')
-            # plt.legend()
-            # plt.show()
-
             area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
                                 np.dot(poly[:,1], np.roll(poly[:,0], -1)))
             area_systole.append(area_i)
@@ -324,19 +337,24 @@ def tric_apex_distance_calculation(free_wall_filtered,
         area_diastole = remove_outliers_iqr(area_diastole)
         area_systole = remove_outliers_iqr(area_systole)
         diast_area = area_diastole.max()
+        diast_area_rvfac = remove_outliers_iqr(area_diastole_rvfac)
+        diast_area_rvfac = diast_area_rvfac.max()
         syst_area = area_systole.min()
             
-        rvfac = (diast_area - syst_area) / diast_area * 100
+        rvfac = (diast_area_rvfac - syst_area) / diast_area_rvfac * 100
 
         dist_0 = remove_outliers_iqr(dist_0)
+        dist_0_unfiltered = remove_outliers_iqr(dist_0_unfiltered)
         dist_1 = remove_outliers_iqr(dist_1)
+        dist_1_unfiltered = remove_outliers_iqr(dist_1_unfiltered)
         dist_2 = remove_outliers_iqr(dist_2)
-        rvldfw = dist_0.max()
+        dist_2_unfiltered = remove_outliers_iqr(dist_2_unfiltered)
+        rvldfw = dist_0.max()  
         rvldsep = dist_1.max()
-        rvlsfw = dist_0.min()
-        rvlssep = dist_1.min()
+        rvlsfw = dist_0_unfiltered.min()
+        rvlssep = dist_1_unfiltered.min()
         rvldmid = dist_2.max()
-        rvlsmid = dist_2.min()
+        rvlsmid = dist_2_unfiltered.min()
 
         rvlsffw = (rvldfw - rvlsfw)/ rvldfw * 100
         rvlsfsep = (rvldsep - rvlssep)/ rvldsep * 100
@@ -390,12 +408,12 @@ def tapse_calculation(
                 raise ValueError("If tapse_calc is 'projection', direction must be provided")
             
             elif tapse_calc == 'distance':
-                diff_septum = coordinates_septum[:, np.newaxis, :] - coordinates_septum[np.newaxis, :, :]  # forma (n, n, 2)
-                dist_septum = np.linalg.norm(diff_septum, axis=-1)  # forma (n, n)
+                diff_septum = coordinates_septum[:, np.newaxis, :] - coordinates_septum[np.newaxis, :, :]  # (n, n, 2)
+                dist_septum = np.linalg.norm(diff_septum, axis=-1)  # (n, n)
                 tapse_septum = dist_septum.max()
 
-                diff_fw = coordinates_fw[:, np.newaxis, :] - coordinates_fw[np.newaxis, :, :]  # forma (n, n, 2)
-                dist_fw = np.linalg.norm(diff_fw, axis=-1)  # forma (n, n)
+                diff_fw = coordinates_fw[:, np.newaxis, :] - coordinates_fw[np.newaxis, :, :]  # (n, n, 2)
+                dist_fw = np.linalg.norm(diff_fw, axis=-1)  # (n, n)
                 tapse_fw = dist_fw.max()
                 tapse = (tapse_septum + tapse_fw) / 2
 
@@ -411,12 +429,12 @@ def tapse_calculation(
                 raise ValueError("If tapse_calc is 'projection', direction must be provided")
             
             elif tapse_calc == 'distance':
-                diff_septum = coordinates_septum_filtered[:, np.newaxis, :] - coordinates_septum_filtered[np.newaxis, :, :]  # forma (n, n, 2)
-                dist_septum = np.linalg.norm(diff_septum, axis=-1)  # forma (n, n)
+                diff_septum = coordinates_septum_filtered[:, np.newaxis, :] - coordinates_septum_filtered[np.newaxis, :, :]  # (n, n, 2)
+                dist_septum = np.linalg.norm(diff_septum, axis=-1)  # (n, n)
                 tapse_septum = dist_septum.max()
 
-                diff_fw = coordinates_fw_filtered[:, np.newaxis, :] - coordinates_fw_filtered[np.newaxis, :, :]  # forma (n, n, 2)
-                dist_fw = np.linalg.norm(diff_fw, axis=-1)  # forma (n, n)
+                diff_fw = coordinates_fw_filtered[:, np.newaxis, :] - coordinates_fw_filtered[np.newaxis, :, :]  # (n, n, 2)
+                dist_fw = np.linalg.norm(diff_fw, axis=-1)  # (n, n)
                 tapse_fw = dist_fw.max()
                 tapse = (tapse_septum + tapse_fw) / 2
 

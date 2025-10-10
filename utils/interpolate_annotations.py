@@ -40,25 +40,25 @@ def interpolate_annotations_h5(annotation_path, save_path):
         new_h5_file.create_dataset('annotations', data=annotations)
 
 if __name__ == "__main__":
-    folder = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
-    for subfolder in os.listdir(folder):
-        if subfolder == 'readme.txt':
-            continue
-        sub_path = os.path.join(folder, subfolder)
-        flag_done = False
-        flag_annotated = False
-        for file in os.listdir(sub_path):
-            # if 'interpolated' in file:
-            #     flag_done = True
-            if 'corrected' in file:
-                flag_annotated = True
-        if not flag_done and flag_annotated:    
-            for file in os.listdir(sub_path):
-                if 'corrected' not in file:
-                    continue
-                else:
-                    file_path = os.path.join(sub_path, file)
-                    save_path = os.path.join(sub_path, file.replace('_corrected.h5', '_interpolated.h5'))
-                    interpolate_annotations_h5(file_path, save_path)
-                    print(f'Interpolated annotations for {file_path} and saved to {save_path}')
-    # interpolate_annotations_h5(r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated\_11010\P42A0G2A_corrected.h5', r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated\_11010\P42A0G2A_interpolated.h5')
+    # folder = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
+    # for subfolder in os.listdir(folder):
+    #     if subfolder == 'readme.txt':
+    #         continue
+    #     sub_path = os.path.join(folder, subfolder)
+    #     flag_done = False
+    #     flag_annotated = False
+    #     for file in os.listdir(sub_path):
+    #         # if 'interpolated' in file:
+    #         #     flag_done = True
+    #         if 'corrected' in file:
+    #             flag_annotated = True
+    #     if not flag_done and flag_annotated:    
+    #         for file in os.listdir(sub_path):
+    #             if 'corrected' not in file:
+    #                 continue
+    #             else:
+    #                 file_path = os.path.join(sub_path, file)
+    #                 save_path = os.path.join(sub_path, file.replace('_corrected.h5', '_interpolated.h5'))
+    #                 interpolate_annotations_h5(file_path, save_path)
+    #                 print(f'Interpolated annotations for {file_path} and saved to {save_path}')
+    interpolate_annotations_h5(r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_corrected.h5', r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_interpolated_2.h5')

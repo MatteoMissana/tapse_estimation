@@ -8,7 +8,7 @@ import seaborn as sns
 import argparse
 
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
-from utils.plot import save_image
+from utils.plot import save_image, save_image_ann_pred
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from models.models import Unet
 
@@ -48,6 +48,7 @@ def process_h5_file_single(
     save_model_path,
     folder,
     save_images=True,
+    save_annotations=False,
     prediction_stats=False,
     threshold=0.875,
     no_sudden_movements=False,
@@ -59,8 +60,9 @@ def process_h5_file_single(
 
     with h5py.File(file_path, 'r') as f:
         images = f['tissue']['data'][()]  # (H, W, N)
-        if prediction_stats:
+        if prediction_stats or save_annotations:
             annotations = f['annotations'][()]
+
     images = apply_lut(images.transpose(1, 0, 2)[:, ::-1, :])
     images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
     images = images / images.max()
@@ -82,8 +84,12 @@ def process_h5_file_single(
             coordinates_array[i, c] = center_of_mass(output[0, c].detach(), thresh=threshold)
 
         if save_images:
-            keypoints = [tuple(coordinates_array[i, k]) for k in range(3)]
+            pred_points = [tuple(coordinates_array[i, k]) for k in range(3)]
+            ann_points = None
             bold_flag = False
+
+            if save_annotations and 'annotations' in locals():
+                ann_points = [tuple(annotations[i, k]) for k in range(3)]
 
             if prediction_stats:
                 dists = np.linalg.norm(coordinates_array[i] - annotations[i], axis=-1)
@@ -91,15 +97,21 @@ def process_h5_file_single(
                     bold_flag = True
                     print(f"[WARNING] Error > 40 in image {i} of file {file_path}, with an error of {dists.max()/2} mm")
 
-            save_image(img[0, 0].cpu().numpy(), points=keypoints, save_folder=save_path, bold=bold_flag)
+            # Save both pred (red) and ann (green)
+            save_image_ann_pred(
+                img[0, 0].cpu().numpy(),
+                ann_points=ann_points,
+                pred_points=pred_points,
+                save_folder=save_path,
+                bold=bold_flag
+            )
 
     if no_sudden_movements:
         for j in range(3):  # for each keypoint
-            for i in range(1, N-1):
-                if (np.linalg.norm(coordinates_array[i, j] - coordinates_array[i-1, j]) > threshold_sudden and
-                    np.linalg.norm(coordinates_array[i, j] - coordinates_array[i+1, j]) > threshold_sudden):
-                    coordinates_array[i, j] = (coordinates_array[i-1, j] + coordinates_array[i+1, j]) / 2
-
+            for i in range(1, N - 1):
+                if (np.linalg.norm(coordinates_array[i, j] - coordinates_array[i - 1, j]) > threshold_sudden and
+                    np.linalg.norm(coordinates_array[i, j] - coordinates_array[i + 1, j]) > threshold_sudden):
+                    coordinates_array[i, j] = (coordinates_array[i - 1, j] + coordinates_array[i + 1, j]) / 2
 
     if prediction_stats:
         stats, distances = compute_keypoint_distance_stats(coordinates_array, annotations)
@@ -112,14 +124,16 @@ def main():
     parser = argparse.ArgumentParser(description="Landmark prediction from .h5 files")
     parser.add_argument("--threshold", required=True, type=float, default=0.875, help="Threshold for center_of_mass")
     parser.add_argument("--save_images", action='store_true', help="Flag to save images with predicted keypoints")
+    parser.add_argument("--save_annotations", action='store_true', help="Flag to also draw annotation points on images")
     parser.add_argument("--per_patient", action='store_true', help="If set, compute boxplots grouped by patient instead of keypoint")
-    parser.add_argument('--no_sudden_movements', action='store_true', help='Flag to avoid sudden movements in keypoints (not implemented yet)')
+    parser.add_argument('--no_sudden_movements', action='store_true', help='Flag to avoid sudden movements in keypoints')
     parser.add_argument('--threshold_sudden', type=int, default=20, help='Threshold for sudden movement detection')
     args = parser.parse_args()
 
+
     model_checkpoint = r'2d/runs/best_unet/best_model.pth'
     test_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
-    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\boxplots_2_pixels'
+    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\boxplots_2'
 
     os.makedirs(save_model_path, exist_ok=True)
 
@@ -142,17 +156,18 @@ def main():
                     file_path = os.path.join(folder_path, file)
 
                     coordinates_array, stats, distances = process_h5_file_single(
-                        file_path=file_path,
-                        model=model,
-                        device=device,
-                        save_model_path=save_model_path,
-                        folder=folder,
-                        save_images=args.save_images,
-                        prediction_stats=True,
-                        threshold=args.threshold,
-                        no_sudden_movements=args.no_sudden_movements,
-                        threshold_sudden=args.threshold_sudden
-                    )
+                                                                                    file_path=file_path,
+                                                                                    model=model,
+                                                                                    device=device,
+                                                                                    save_model_path=save_model_path,
+                                                                                    folder=folder,
+                                                                                    save_images=args.save_images,
+                                                                                    save_annotations=args.save_annotations,  # <-- pass new arg
+                                                                                    prediction_stats=True,
+                                                                                    threshold=args.threshold,
+                                                                                    no_sudden_movements=args.no_sudden_movements,
+                                                                                    threshold_sudden=args.threshold_sudden
+                                                                                )
 
                     # Collect distances for each keypoint (default)
                     for i in range(3):
@@ -207,11 +222,10 @@ def main():
         q3 = grouped.quantile(0.75)
 
         plt.figure(figsize=(10, 6))
-        sns.boxplot(x='patient', y='distance', data=df_box)
+        sns.boxplot(y='patient', x='distance', data=df_box, orient='h', width=0.4)
         plt.title('Landmark error distribution per patient')
-        plt.ylabel('Distance (mm)')
-        plt.xlabel('Patient ID')
-        plt.grid(True)
+        plt.xlabel('Distance (mm)')
+        plt.ylabel('Patient ID')
 
         boxplot_path = os.path.join(save_model_path, "patient_distance_boxplot.pdf")
         plt.savefig(boxplot_path, dpi=300)
@@ -225,12 +239,26 @@ def main():
         q1 = grouped.quantile(0.25)
         q3 = grouped.quantile(0.75)
 
-        plt.figure(figsize=(8, 6))
-        sns.boxplot(x='kp', y='distance', data=df_box)
-        plt.title('Landmark error distribution in the test set')
-        plt.ylabel('Distance (mm)')
-        plt.xlabel('')
-        plt.grid(True)
+        plt.figure(figsize=(13, 3))  # small height -> less vertical spacing
+
+        sns.boxplot(y='kp', x='distance', data=df_box, orient='h', width = 0.5)
+
+        plt.title('Landmark error distribution', fontsize=10)
+        plt.xlabel('Distance (mm)', fontsize=9)
+        plt.ylabel('')
+        plt.grid(True, axis='x', linestyle='--', alpha=0.4)
+
+        # plt.tight_layout(pad=0.2)
+        plt.subplots_adjust(left=0.17, bottom=0.15)
+
+
+        # plt.figure(figsize=(8, 6))
+        # sns.boxplot(y='kp', x='distance', data=df_box, orient='h', width=0.2, dodge=False)
+        # plt.title('Landmark error distribution in the test set')
+        # plt.xlabel('Distance (mm)')
+        # plt.ylabel('')
+        # plt.grid(True)
+        # plt.tight_layout(pad=0.5)
 
         boxplot_path = os.path.join(save_model_path, "keypoint_distance_boxplot.pdf")
         plt.savefig(boxplot_path, dpi=300)

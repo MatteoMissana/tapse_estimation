@@ -1,14 +1,14 @@
 import os
 import subprocess
 
-base_dir = r"D:\mmissana\tapse_estimation\2d\results_no_sudden_movement_4_pixels"
+base_dir = r"D:\mmissana\tapse_estimation\2d\results"
 h5_dir = r"D:\mmissana\data\RV_PATIENTS\RV_patients_converted"
 model_path = r"D:\mmissana\tapse_estimation\2d\runs\best_unet\best_model.pth"
 script_path = r"d:/mmissana/tapse_estimation/2d/indices_prediction.py"
 
 for folder in os.listdir(base_dir):
     folder_path = os.path.join(base_dir, folder)
-    if not os.path.isdir(folder_path):
+    if not os.path.isdir(folder_path) or not "best" in folder:
         continue
 
     excel_path = os.path.join(folder_path, "best_unet.xlsx")
@@ -22,8 +22,8 @@ for folder in os.listdir(base_dir):
         "--residuals", "0",
         "--threshold", "0.875",
         "--two_dimensional",
-        "--no_sudden_movements",
-        "--threshold_sudden", "4",
+        # "--no_sudden_movements",
+        # "--threshold_sudden", "4",
         "--excel_path", excel_path
     ]
 

@@ -13,9 +13,17 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
 
     merged = pd.merge(annotations, predictions, on='id', suffixes=('_ann', '_pred'))
 
-    if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns):
+    if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
         merged['rvfac_pred'] = (merged['rvad_pred'] - merged['rvas_pred']) / merged['rvad_pred'] * 100
         print("RVFACpred calculated and added to DataFrame.")
+
+    if {'rvlsfw_pred', 'rvldfw_pred'}.issubset(merged.columns) and "best_rvlsffw" in automatic_path:
+        merged['rvlsffw_pred'] = (merged['rvldfw_pred'] - merged['rvlsfw_pred']) / merged['rvldfw_pred'] * 100
+        print("RVLSFfwpred calculated and added to DataFrame.")
+
+    if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_rvlsffw" in automatic_path:
+        merged['rvlsfsep_pred'] = (merged['rvldsep_pred'] - merged['rvlssep_pred']) / merged['rvldsep_pred'] * 100
+        print("RVLSFseppred calculated and added to DataFrame.")
 
     index_columns = [col for col in predictions.columns if col not in ['id', 'path']]
 
@@ -118,11 +126,21 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         plt.axhline(mean_diff, color='blue', linestyle='--')
         plt.axhline(loa_upper, color='red', linestyle=':')
         plt.axhline(loa_lower, color='red', linestyle=':')
+
+        # Add +1.96 SD / -1.96 SD labels
+        plt.text(mean.min(), loa_upper, '+1.96 SD', color='red', va='bottom', ha='left', fontsize=8)
+        plt.text(mean.min(), loa_lower, '−1.96 SD', color='red', va='top', ha='left', fontsize=8)
+
+        # Add margin beyond the limits of agreement
+        y_margin = 0.3 * (loa_upper - loa_lower)
+        plt.ylim(loa_lower - y_margin, loa_upper + y_margin)
+
         plt.title(f'Bland-Altman Plot for {title}')
         plt.xlabel(f'Mean of Annotation and Prediction ({unit})')
         plt.ylabel(f'Difference (Annotation - Prediction) ({unit})')
         plt.grid(True)
         plt.tight_layout()
+
 
         if save_path:
             output_file = os.path.join(save_path, f"{col}.pdf")
@@ -167,14 +185,24 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
             'Spearman p-value': pi_spearman
         })
 
+        # Bland-Altman plot
         plt.figure(figsize=(6, 4))
         plt.scatter(mean, diff, alpha=0.6)
         plt.axhline(mean_diff, color='blue', linestyle='--')
         plt.axhline(loa_upper, color='red', linestyle=':')
         plt.axhline(loa_lower, color='red', linestyle=':')
-        plt.title('Bland-Altman Plot for TAPSEglobal')
-        plt.xlabel('Mean of Annotation and Prediction (mm)')
-        plt.ylabel('Difference (Annotation - Prediction) (mm)')
+
+        # Add +1.96 SD / -1.96 SD labels
+        plt.text(mean.min(), loa_upper, '+1.96 SD', color='red', va='bottom', ha='left', fontsize=8)
+        plt.text(mean.min(), loa_lower, '−1.96 SD', color='red', va='top', ha='left', fontsize=8)
+
+        # Add margin beyond the limits of agreement
+        y_margin = 0.3 * (loa_upper - loa_lower)
+        plt.ylim(loa_lower - y_margin, loa_upper + y_margin)
+
+        plt.title(f'Bland-Altman Plot for {title}')
+        plt.xlabel(f'Mean of Annotation and Prediction ({unit})')
+        plt.ylabel(f'Difference (Annotation - Prediction) ({unit})')
         plt.grid(True)
         plt.tight_layout()
 

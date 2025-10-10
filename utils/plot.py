@@ -229,3 +229,65 @@ def save_image(image, points=None, save_folder="visualizations", bold=False):
     # Save the image
     plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
     plt.close()  # Close the plot to avoid displaying it in an interactive session
+
+
+def save_image_ann_pred(image, ann_points=None, pred_points=None, save_folder="visualizations", bold=False):
+    """
+    Saves a 2D image with optional annotation and prediction points highlighted.
+
+    Parameters:
+    -----------
+    image : 2D array
+        Image to save (can be NumPy or CuPy array).
+    ann_points : list of (x, y), optional
+        Annotation points to plot (green circles if bold, green '+' otherwise).
+    pred_points : list of (x, y), optional
+        Prediction points to plot (red circles if bold, red 'x' otherwise).
+    save_folder : str
+        Folder where the image will be saved (default: 'visualizations').
+    bold : bool
+        If True, use filled circles; otherwise, use simple markers.
+    """
+    # Convert CuPy arrays to NumPy if needed
+    if 'cp' in globals() and isinstance(image, cp.ndarray):
+        image = cp.asnumpy(image)
+
+    os.makedirs(save_folder, exist_ok=True)
+
+    # Auto-increment file name
+    existing_files = [f for f in os.listdir(save_folder) if f.endswith('.png')]
+    save_path = os.path.join(save_folder, f"image_{len(existing_files) + 1}.png")
+
+    plt.imshow(image, cmap='gray')
+    plt.axis('off')
+
+    # Plot annotation points
+    if ann_points:
+        ann_points = np.array(ann_points)
+        if bold:
+            for x, y in ann_points:
+                circle = plt.Circle((x, y), radius=4, color='blue', fill=True)
+                plt.gca().add_patch(circle)
+        else:
+            plt.scatter(ann_points[:, 0], ann_points[:, 1], c='blue', marker='x', label='Annotation', s=50)
+
+    # Plot prediction points
+    if pred_points:
+        pred_points = np.array(pred_points)
+        if bold:
+            for x, y in pred_points:
+                circle = plt.Circle((x, y), radius=4, color='red', fill=True)
+                plt.gca().add_patch(circle)
+        else:
+            plt.scatter(pred_points[:, 0], pred_points[:, 1], c='red', marker='o', label='Prediction', s=50)
+
+    # Add legend only if both are present
+    if ann_points is not None and len(ann_points) > 0 and pred_points is not None and len(pred_points) > 0:
+        leg = plt.legend(loc='upper left', frameon=False)
+
+        colors = ['blue', 'red']
+        for text, color in zip(leg.get_texts(), colors):
+            text.set_color(color)
+
+    plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+    plt.close()

@@ -24,7 +24,7 @@ def create_grid_with_labels(image_paths, output_path="grid.png"):
 
         # Disegna etichetta
         draw = ImageDraw.Draw(img)
-        draw.text((10, 10), labels[idx], font=font, fill="white")
+        draw.text((300, 10), labels[idx], font=font, fill="white")
 
         # Posizione nella griglia 3x3
         x = (idx % 3) * w
@@ -36,15 +36,18 @@ def create_grid_with_labels(image_paths, output_path="grid.png"):
 
 # Example usage
 images = [
-    '2d/results/boxplots_2/100/P4297P80_interpolated/image_1.png',
-    '2d/results/boxplots_2/111/P429AL06_interpolated/image_1.png',
-    '2d/results/boxplots_2/140/P429BN8C_interpolated/image_1.png',
-    '2d/results/boxplots_2/149/P429D0OG_interpolated/image_1.png',
-    '2d/results/boxplots_2/160/P429DN8I_interpolated/image_1.png',
-    '2d/results/boxplots_2/170/P429EEOK_interpolated/image_1.png',
-    '2d/results/boxplots_2/190/P429G08O_interpolated/image_1.png',
-    '2d/results/boxplots_2/198/P429G9OQ_interpolated/image_1.png',
-    '2d/results/boxplots_2/199/P42A0G2A_interpolated/image_1.png'
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\100.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\111.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\140.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\149.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\160.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\170.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\190.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\198.png',
+    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\199.png'
+
+    
+    
 ]
 
-create_grid_with_labels(images, r"D:\mmissana\tapse_estimation\2d\results\boxplots_2\composition.png")
+create_grid_with_labels(images, r"D:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\grid.png")
