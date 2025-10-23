@@ -97,8 +97,13 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         mean = x.mean(axis=1)
         diff = x[ann_col] - x[pred_col]
 
+        perc_error = (diff.abs() / x[ann_col]).abs() * 100
+        mean_perc_error = perc_error.mean()
+
+
         mean_diff = diff.mean()
         std_diff = diff.std()
+        var_diff = diff.var()
         loa_upper = mean_diff + 1.96 * std_diff
         loa_lower = mean_diff - 1.96 * std_diff
 
@@ -112,12 +117,16 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         stats.append({
             'Index': col,
             'Mean Error': mean_diff,
+            'Variance of Error': var_diff,
+            'Std Dev of Error': std_diff,
             '95% LoA Lower': loa_lower,
             '95% LoA Upper': loa_upper,
+            'Mean % Error': mean_perc_error,                
             'Pearson r': corr,
             'Pearson p-value': pi_pearson,
             'Spearman r': spearman_corr,
-            'Spearman p-value': pi_spearman
+            'Spearman p-value': pi_spearman,
+            'Mean value': mean.mean()
         })
 
         # Bland-Altman plot
@@ -156,6 +165,9 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
 
     # TAPSE calculation and plot
     try:
+        title = 'TAPSEglobal'    
+        unit = 'mm' 
+
         merged['tapse_ann'] = merged[['tapsefw_ann', 'tapsesep_ann']].mean(axis=1)
         merged['tapse_pred'] = merged[['tapsefw_pred', 'tapsesep_pred']].mean(axis=1)
 
@@ -163,8 +175,12 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         mean = x.mean(axis=1)
         diff = x['tapse_ann'] - x['tapse_pred']
 
+        perc_error = (diff.abs() / x['tapse_ann'].abs()) * 100
+        mean_perc_error = perc_error.mean()
+
         mean_diff = diff.mean()
         std_diff = diff.std()
+        var_diff = diff.var()
         loa_upper = mean_diff + 1.96 * std_diff
         loa_lower = mean_diff - 1.96 * std_diff
 
@@ -177,12 +193,16 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         stats.append({
             'Index': 'tapse',
             'Mean Error': mean_diff,
+            'Variance of Error': var_diff,
+            'Std Dev of Error': std_diff,
             '95% LoA Lower': loa_lower,
             '95% LoA Upper': loa_upper,
+            'Mean % Error': mean_perc_error,   
             'Pearson r': corr,
             'Pearson p-value': pi_pearson,
             'Spearman r': spearman_corr,
-            'Spearman p-value': pi_spearman
+            'Spearman p-value': pi_spearman,
+            'Mean value': mean.mean()
         })
 
         # Bland-Altman plot
@@ -234,9 +254,11 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
             pred_col = f"{col}_pred"
             if ann_col in merged.columns and pred_col in merged.columns:
                 diff_data[f"{col}_diff"] = merged[ann_col] - merged[pred_col]
+                diff_data[f"{col}_perc_error"] = ((merged[ann_col] - merged[pred_col]).abs() / merged[ann_col]).abs() * 100
         # Add TAPSE diff if both parts exist
         if 'tapse_ann' in merged.columns and 'tapse_pred' in merged.columns:
             diff_data['tapse_diff'] = merged['tapse_ann'] - merged['tapse_pred']
+            diff_data['tapse_perc_error'] = ((merged['tapse_ann'] - merged['tapse_pred']).abs() / merged['tapse_ann']).abs() * 100
         
         per_patient_diff_df = pd.DataFrame(diff_data)
         per_patient_diff_file = os.path.join(save_path, "per_patient_differences.xlsx")

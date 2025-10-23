@@ -24,7 +24,7 @@ def create_grid_with_labels(image_paths, output_path="grid.png"):
 
         # Disegna etichetta
         draw = ImageDraw.Draw(img)
-        draw.text((300, 10), labels[idx], font=font, fill="white")
+        draw.text((10, 10), labels[idx], font=font, fill="white")
 
         # Posizione nella griglia 3x3
         x = (idx % 3) * w
@@ -45,9 +45,6 @@ images = [
     r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\190.png',
     r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\198.png',
     r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\199.png'
-
-    
-    
 ]
 
 create_grid_with_labels(images, r"D:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\grid.png")

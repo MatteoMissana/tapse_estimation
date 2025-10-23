@@ -17,6 +17,7 @@ def interpolate_annotations_h5(annotation_path, save_path):
     with h5py.File(annotation_path, 'r') as h5_file:
         if 'annotations' in h5_file:
             annotations = h5_file['annotations'][()]
+            print(f"Loaded annotations with shape: {annotations.shape}")
         else:
             raise ValueError("Annotations not found in the HDF5 file.")
         
@@ -61,4 +62,4 @@ if __name__ == "__main__":
     #                 save_path = os.path.join(sub_path, file.replace('_corrected.h5', '_interpolated.h5'))
     #                 interpolate_annotations_h5(file_path, save_path)
     #                 print(f'Interpolated annotations for {file_path} and saved to {save_path}')
-    interpolate_annotations_h5(r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_corrected.h5', r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_interpolated_2.h5')
+    interpolate_annotations_h5(r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_corrected.h5', r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed\190\P429G08O_interpolated.h5')

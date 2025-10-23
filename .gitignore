@@ -11,6 +11,9 @@ best_predictions_video.mp4
 results_video.mp4
 2d/results_3d/
 2d/results/  
+2d/illustrative_video/
+2d/model_weights.zip
+2d/model_weights/
 2d/runs/  
 2d+memory/runs/     
 2d+t/runs/   

@@ -248,13 +248,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, generator=g)
 
     # Define model
-    if args.model == "U-Net":
-        model = UNet(num_classes=args.num_keypoints, depth=6, start_filts=8).to(device)
-        if args.from_scratch:
-            initialize_weights(model)
-        else:
-            model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
-    elif args.model == "monai_U-Net":
+    if args.model == "monai_U-Net":
         model = monai_UNet(start_filts = args.start_filts, depth = args.depth, dropout= args.dropout, num_residuals=args.n_residuals).to(device)
         if args.from_scratch:
             pass

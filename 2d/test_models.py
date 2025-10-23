@@ -133,7 +133,7 @@ def main():
 
     model_checkpoint = r'2d/runs/best_unet/best_model.pth'
     test_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
-    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\boxplots_2'
+    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\images_prediction_annotation'
 
     os.makedirs(save_model_path, exist_ok=True)
 

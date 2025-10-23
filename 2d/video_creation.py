@@ -117,35 +117,37 @@ def explore_h5(name, obj):
 
 
 if __name__ == "__main__":
-    # prediction_folder = r'2d/results/predictions'
-    # folder = r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
-    # output_folder = r'2d/results/prediction_videos'
-    # patients = []
-    # frequencies = []
-    # for subfolder in os.listdir(folder):
-    #     subfolder_path = os.path.join(folder, subfolder)
-    #     for file in os.listdir(subfolder_path):
-    #         if 'interpolated' in file:
-    #             file_path = os.path.join(subfolder_path, file)
-    #             with h5py.File(file_path, 'r') as f:
-    #                 times = f['tissue']['times'][()]
-    #                 frequency = 1 / (times[1] - times[0])
-    #             patients.append(subfolder)
-    #             frequencies.append(frequency)
-    # print(f"Patients: {patients}")
-    # print(f"Frequencies: {frequencies}")
+    prediction_folder = r'D:\mmissana\tapse_estimation\2d\illustrative_video'
+    folder = r'd:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
+    output_folder = r'D:\mmissana\tapse_estimation\2d\illustrative_video/videos'
+    patients = []
+    frequencies = []
+    for subfolder in os.listdir(folder):
+        subfolder_path = os.path.join(folder, subfolder)
+        for file in os.listdir(subfolder_path):
+            if 'interpolated' in file:
+                file_path = os.path.join(subfolder_path, file)
+                with h5py.File(file_path, 'r') as f:
+                    times = f['tissue']['times'][()]
+                    frequency = 1 / (times[1] - times[0])
+                patients.append(subfolder)
+                frequencies.append(frequency)
+    print(f"Patients: {patients}")
+    print(f"Frequencies: {frequencies}")
 
-    # for i, patient in enumerate(patients):
-    #     patient_folder = os.path.join(prediction_folder, patient)
-    #     if not os.path.exists(patient_folder):
-    #         print(f"Skipping {patient}: folder does not exist.")
-    #         continue
+    for i, patient in enumerate(patients):
+        patient_folder = os.path.join(prediction_folder, patient)
+        if not os.path.exists(patient_folder):
+            print(f"Skipping {patient}: folder does not exist.")
+            continue
         
-    #     output_video_path = os.path.join(output_folder, f"{patient}.mp4")
-    #     if not os.path.exists(output_folder):
-    #         os.makedirs(output_folder)
+        output_video_path = os.path.join(output_folder, f"{patient}.mp4")
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
 
-        # create_video_from_images(patient_folder, output_video_path, fps=frequencies[i].astype(int)) # useful to create videos at the same frequency as the original images
-        folder = r'D:\mmissana\tapse_estimation\2d\results\predictions_boxplots\170\P429EEOK_interpolated'
-        output_video_path = r'D:\mmissana\tapse_estimation\2d\results\predictions_boxplots\170\video_errors.mp4'
-        create_video_from_images(folder, output_video_path, fps=5)
+        print(patient_folder, output_video_path)
+        for fold in os.listdir(patient_folder):
+            create_video_from_images(os.path.join(patient_folder, fold), output_video_path, fps=frequencies[i]) # useful to create videos at the same frequency as the original images
+        # folder = r'2d/illustrative_video/100/P4297P80_interpolated'
+        # output_video_path = r'2d/illustrative_video/video_100_1.mp4'
+        # create_video_from_images(folder, output_video_path, fps=30)

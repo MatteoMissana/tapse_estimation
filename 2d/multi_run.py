@@ -3,7 +3,7 @@ import subprocess
 
 python_exec = r"C:/Users/vcxr10/anaconda3/python.exe"
 script_path = r"d:/mmissana/tapse_estimation/2d/statystical_analysis.py"
-base_dir = r"2d/results_no_sudden_movement_4_pixels"
+base_dir = r"2d/results"
 
 # Loop through all subfolders inside base_dir
 for folder in os.listdir(base_dir):

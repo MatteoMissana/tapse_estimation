@@ -1,13 +1,13 @@
 import os
 import pandas as pd
 
-base_dir = r"2d/results"
+base_dir = r"2d/results_avg_4_pixels_no_190"
 targets = [
     "tapsefw", "tapsesep", "rvfac", "rvad", "rvas", "rvldfw", "rvldsep",
     "rvlsfw", "rvlssep", "tadd", "tasd", "rvldmid", "rvlsmid",
     "rvlsffw", "rvlsfglobal", "rvlsfsep", "rvlsfmid", "tapse"
 ]
-output_file = os.path.join(base_dir, "bland_altman_summary.xlsx")
+output_file = os.path.join(base_dir, "bland_altman_summary_no_sudden.xlsx")
 
 # dizionario: target -> lista di dataframe
 results = {t: [] for t in targets}
