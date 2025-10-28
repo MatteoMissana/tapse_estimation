@@ -206,7 +206,7 @@ def predict_indices(model,
     elif best_combination:
         result = []
         for i in range(index_container.shape[1]):
-            if i in [5,6] and best_rvlsffw:
+            if i in [5] and best_rvlsffw:
                 result.append(index_container[:, i].max())
             elif i in [0, 8]:
                 result.append(index_container[:, i].mean())
