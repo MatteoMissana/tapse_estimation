@@ -13,15 +13,15 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
 
     merged = pd.merge(annotations, predictions, on='id', suffixes=('_ann', '_pred'))
 
-    if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
-        merged['rvfac_pred'] = (merged['rvad_pred'] - merged['rvas_pred']) / merged['rvad_pred'] * 100
-        print("RVFACpred calculated and added to DataFrame.")
+    # if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns) and "best_combination" in automatic_path: 
+    #     merged['rvfac_pred'] = (merged['rvad_pred'] - merged['rvas_pred']) / merged['rvad_pred'] * 100
+    #     print("RVFACpred calculated and added to DataFrame.")
 
-    if {'rvlsfw_pred', 'rvldfw_pred'}.issubset(merged.columns) and "best_rvlsffw" in automatic_path:
-        merged['rvlsffw_pred'] = (merged['rvldfw_pred'] - merged['rvlsfw_pred']) / merged['rvldfw_pred'] * 100
+    if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(merged.columns) and "best_combination" in automatic_path:
+        merged['rvlsffw_pred'] = (merged['rvldfw (only for rv strain calculation)'] - merged['rvlsfw (only for rv strain calculation)']) / merged['rvldfw (only for rv strain calculation)'] * 100
         print("RVLSFfwpred calculated and added to DataFrame.")
 
-    if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_rvlsffw" in automatic_path:
+    if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
         merged['rvlsfsep_pred'] = (merged['rvldsep_pred'] - merged['rvlssep_pred']) / merged['rvldsep_pred'] * 100
         print("RVLSFseppred calculated and added to DataFrame.")
 
@@ -264,6 +264,38 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         per_patient_diff_file = os.path.join(save_path, "per_patient_differences.xlsx")
         per_patient_diff_df.to_excel(per_patient_diff_file, index=False)
 
+        # === Save cleaned predictions ===
+    try:
+        # Reload predictions to avoid accidental modification of merged dataframe
+        preds = pd.read_excel(automatic_path)
+
+        # If best_combination mode, recompute updated RVLSF columns before saving
+        if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(preds.columns) and "best_combination" in automatic_path:
+            preds['rvlsffw'] = (preds['rvldfw (only for rv strain calculation)'] - preds['rvlsfw (only for rv strain calculation)']) / preds['rvldfw (only for rv strain calculation)'] * 100
+            print("RVLSFfw recalculated for predictions.xlsx")
+
+        if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
+            # We can extract the recalculated column directly from merged
+            preds['rvlsfsep'] = merged['rvlsfsep_pred'].values
+            print("RVLSFsep recalculated for predictions.xlsx")
+
+        # Drop columns used only for internal strain calculations
+        cols_to_drop = [
+            "rvlsfw (only for rv strain calculation)",
+            "rvldfw (only for rv strain calculation)",
+            "path"
+        ]
+        preds = preds.drop(columns=[c for c in cols_to_drop if c in preds.columns])
+
+        # Save cleaned predictions file next to the original
+        pred_out_path = os.path.join(os.path.dirname(automatic_path), "predictions.xlsx")
+        preds.to_excel(pred_out_path, index=False)
+        print(f"Saved cleaned predictions file at: {pred_out_path}")
+
+    except Exception as e:
+        print(f"Error while creating predictions.xlsx: {e}")
+
+
 
 
 if __name__ == "__main__":
@@ -272,7 +304,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
 
-    manual_path = r"D:\mmissana\data/RV_PATIENTS/090525_Yu_manua_2D_and_3D_RV_TEE.xlsx"
+    manual_path = r"c:\Users\User\Desktop\maesurements_jinyang.xlsx"
     # automatic_path = r"2d/results/best_unet_filter_distance_max_spline/best_unet.xlsx"
     # patient_ids = [140, 141, 149, 160, 170, 184, 190, 198      , 100, 106, 111, 135, 199, 920]  # First ones are the one im sure of, other are the ones that weren't annotated
     # patient_ids = [140, 141, 149, 160, 170, 190, 198      , 100, 111, 199, 920]  # patients ids list (excluded the patients that jinyang told us to exclude)

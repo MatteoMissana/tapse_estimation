@@ -18,6 +18,7 @@ def compute_keypoint_distance_stats(predictions, ground_truths):
         raise ValueError("Shape mismatch: predictions and ground_truths must have the same shape.")
 
     distances = np.linalg.norm(predictions - ground_truths, axis=-1)  # (N, 3)
+    distances = distances / 2
 
     stats = {
         'global': {
@@ -38,7 +39,7 @@ def compute_keypoint_distance_stats(predictions, ground_truths):
             'std': np.std(point_dists)
         })
 
-    return stats, distances / 2
+    return stats, distances
 
 
 def process_h5_file_single(
@@ -131,9 +132,9 @@ def main():
     args = parser.parse_args()
 
 
-    model_checkpoint = r'2d/runs/best_unet/best_model.pth'
-    test_path = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
-    save_model_path = r'D:\mmissana\tapse_estimation\2d\results\images_prediction_annotation'
+    model_checkpoint = r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights\best_unet\best_model.pth'
+    test_path = r'C:\Users\User\Desktop\final_reviewed_dataset'
+    save_model_path = r'C:\Users\User\Desktop\boxplots'
 
     os.makedirs(save_model_path, exist_ok=True)
 
@@ -212,6 +213,14 @@ def main():
 
     # --- Build DataFrame for distances ---
     df_box = pd.DataFrame(all_distances)
+    print("\n--- Keypoint Distance Statistics (mm) ---")
+    for kp, group in df_box.groupby('kp')['distance']:
+        mean_val = group.mean()
+        std_val = group.std()
+        median_val = group.median()
+        q1_val = group.quantile(0.25)
+        q3_val = group.quantile(0.75)
+        print(f"{kp:25s}  mean = {mean_val:.2f} mm   std = {std_val:.2f} mm   median = {median_val:.2f} mm   Q1 = {q1_val:.2f} mm   Q3 = {q3_val:.2f} mm")
 
     # --- Switch plotting based on flag ---
     if args.per_patient:

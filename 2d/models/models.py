@@ -6,7 +6,7 @@ from torchvision import models
 
 sys.path.insert(0, '..')
 sys.path.insert(0, '../..')
-from dl_mapse.Code.Models import resnet3d
+#from dl_mapse.Code.Models import resnet3d
 
 
 class Identity(nn.Module):
