@@ -197,8 +197,17 @@ def predict_indices(model,
                 window_both,
                 window_unfiltered
                 )
-            
-        elif apply_filter == 'none': # I only pass the window that the functions needs
+        
+        else:
+            if apply_filter == 'none':
+                window = window_unfiltered
+            elif apply_filter == 'kalman':
+                window = window_kalman
+            elif apply_filter == 'both':
+                window = window_both
+            else: # apply_filter == 'avg'
+                window = window_avg            
+       
             # calculate shape related indexes
             (rvfac,
             diast_area, 
@@ -215,105 +224,19 @@ def predict_indices(model,
             rvlsfsep, 
             rvlsfmid, 
             rvlsfglobal) = tric_apex_distance_calculation(
-                window_unfiltered, 
+                window, 
                 method = area_method,
                 )
             
             # calculate tapse
             (tapse_sep, 
             tapse_fw) = tapse_calculation(
-                window_unfiltered,
-                tapse_calc=tapse_calc,
-                direction=direction,
-                )
-            
-        elif apply_filter == 'avg': # only pass avg window
-            # calculate shape related indexes
-            (rvfac,
-            diast_area, 
-            syst_area, 
-            rvldfw, 
-            rvldsep, 
-            rvlsfw, 
-            rvlssep,
-            rvldmid, 
-            rvlsmid, 
-            tadd, 
-            tasd, 
-            rvlsffw, 
-            rvlsfsep, 
-            rvlsfmid, 
-            rvlsfglobal) = tric_apex_distance_calculation(
-                window_avg, 
-                method = area_method,
-                )
-            
-            # calculate tapse
-            (tapse_sep, 
-            tapse_fw) = tapse_calculation(
-                window_avg,
+                window,
                 tapse_calc=tapse_calc,
                 direction=direction,
                 )
         
-        elif apply_filter == 'kalman':
-            # calculate shape related indexes
-            (rvfac,
-            diast_area, 
-            syst_area, 
-            rvldfw, 
-            rvldsep, 
-            rvlsfw, 
-            rvlssep,
-            rvldmid, 
-            rvlsmid, 
-            tadd, 
-            tasd, 
-            rvlsffw, 
-            rvlsfsep, 
-            rvlsfmid, 
-            rvlsfglobal) = tric_apex_distance_calculation(
-                window_kalman, 
-                method = area_method,
-                )
-            
-            # calculate tapse
-            (tapse_sep, 
-            tapse_fw) = tapse_calculation(
-                window_kalman,
-                tapse_calc=tapse_calc,
-                direction=direction,
-                )
-        
-        elif apply_filter == 'both':
-            # calculate shape related indexes
-            (rvfac,
-            diast_area, 
-            syst_area, 
-            rvldfw, 
-            rvldsep, 
-            rvlsfw, 
-            rvlssep,
-            rvldmid, 
-            rvlsmid, 
-            tadd, 
-            tasd, 
-            rvlsffw, 
-            rvlsfsep, 
-            rvlsfmid, 
-            rvlsfglobal) = tric_apex_distance_calculation(
-                window_both, 
-                method = area_method,
-                )
-            
-            # calculate tapse
-            (tapse_sep, 
-            tapse_fw) = tapse_calculation(
-                window_both,
-                tapse_calc=tapse_calc,
-                direction=direction,
-                )
-        
+        # if not best_combination then the array has 17 values (all the indexes)
         if not best_combination:
             index_container[i] = [
                 tapse_fw * 1000, 
@@ -334,6 +257,9 @@ def predict_indices(model,
                 rvlsfsep, 
                 rvlsfmid,
             ]
+        # otherwise the array also has 2 more values, that are only used in statystical_analysis.py to recalculate some indexes 
+        # (necessary bbecause some indexes are recalculated with some overestimation of other indexes, so I want to extract both the index 
+        # and its overestimation and then use the overestimation to recalcualte the second index)
         else:
             index_container[i] = [
                 tapse_fw * 1000, 
