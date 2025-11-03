@@ -60,9 +60,22 @@ def process_h5_file_single(
     """
 
     with h5py.File(file_path, 'r') as f:
+        print(f"\n--- Contents of {file_path} ---")
+
+        def print_h5_structure(name, obj):
+            if isinstance(obj, h5py.Dataset):
+                print(f"Dataset: {name} | shape={obj.shape} | dtype={obj.dtype}")
+            elif isinstance(obj, h5py.Group):
+                print(f"Group: {name}")
+
+        f.visititems(print_h5_structure)
+        print("--- End of file structure ---\n")
+
         images = f['tissue']['data'][()]  # (H, W, N)
         if prediction_stats or save_annotations:
             annotations = f['annotations'][()]
+            print(annotations.shape)
+            print(images.shape)
 
     images = apply_lut(images.transpose(1, 0, 2)[:, ::-1, :])
     images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
@@ -115,6 +128,7 @@ def process_h5_file_single(
                     coordinates_array[i, j] = (coordinates_array[i - 1, j] + coordinates_array[i + 1, j]) / 2
 
     if prediction_stats:
+        print(coordinates_array.shape)
         stats, distances = compute_keypoint_distance_stats(coordinates_array, annotations)
         return coordinates_array, stats, distances
 
@@ -134,7 +148,7 @@ def main():
 
     model_checkpoint = r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights\best_unet\best_model.pth'
     test_path = r'C:\Users\User\Desktop\final_reviewed_dataset'
-    save_model_path = r'C:\Users\User\Desktop\boxplots'
+    save_model_path = r'C:\Users\User\Desktop\boxplots_validation'
 
     os.makedirs(save_model_path, exist_ok=True)
 
@@ -151,10 +165,12 @@ def main():
     # --- Loop over patients (folders) ---
     for folder in os.listdir(test_path):
         folder_path = os.path.join(test_path, folder)
-        if folder in ['100', '111', '140', '149', '160', '170', '190', '198', '199', '920']:
+        # if folder in ['100', '111', '140', '149', '160', '170', '190', '198', '199', '920']: # test set
+        if folder in ['135', '141', '184', '190']: # validation set
             for file in os.listdir(folder_path):
                 if 'interpolated' in file:
                     file_path = os.path.join(folder_path, file)
+                    print(file_path)
 
                     coordinates_array, stats, distances = process_h5_file_single(
                                                                                     file_path=file_path,

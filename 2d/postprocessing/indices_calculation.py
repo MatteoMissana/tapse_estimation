@@ -14,15 +14,8 @@ def remove_outliers_iqr(data, k=1.5):
     upper = q3 + k * iqr
     return data[(data >= lower) & (data <= upper)]
 
-def tric_apex_distance_calculation(free_wall_filtered,
-                                   septum_filtered, 
-                                   apex_filtered,
-                                   free_wall,
-                                   septum, 
-                                   apex, 
-                                   method="triangle", 
-                                   filter = False,
-                                   best_combination = False
+def tric_apex_distance_calculation(window, 
+                                   method="triangle",
                                    ):
     """
     Calculate the distance from the apex to the free wall and septum.
@@ -31,7 +24,7 @@ def tric_apex_distance_calculation(free_wall_filtered,
     
     Parameters
     ----------
-    free_wall, septum, apex : ndarray (..., 2)
+    window: ndarray (..., 3, 2) 
         Coordinates of the free wall, septum, and apex at each time point.
     method : str, optional
         'triangle' (Heron's formula) or 'spline' (area under spline through points).
@@ -42,227 +35,120 @@ def tric_apex_distance_calculation(free_wall_filtered,
     rvldmid, rvlsmid, tadd, tasd, rvlsffw, rvlsfsep, rvlsfmid, rvlsfglobal
     """
 
-    if not best_combination:
-        if not filter:
-            midpoint = (free_wall + septum) / 2
+    free_wall = window[:,0]
+    septum = window[:,1]
+    apex = window[:,2]
 
-            # Distances from apex
-            dist_0 = np.linalg.norm(free_wall - apex, axis=-1)
-            dist_1 = np.linalg.norm(septum - apex, axis=-1)
-            dist_2 = np.linalg.norm(midpoint - apex, axis=-1)
+    midpoint = (free_wall + septum) / 2
 
-            diameter = np.linalg.norm(free_wall - septum, axis=-1)
+    # Distances
+    length_fw = np.linalg.norm(free_wall - apex, axis=-1)
+    length_septum = np.linalg.norm(septum - apex, axis=-1)
+    length_mid = np.linalg.norm(midpoint - apex, axis=-1)
 
-            if method == "triangle": # calculate the RV area as the area inside the triangle
-                semiperimeter = (dist_0 + dist_1 + diameter) / 2
-                area = np.sqrt(
-                    semiperimeter
-                    * (semiperimeter - dist_0)
-                    * (semiperimeter - dist_1)
-                    * (semiperimeter - diameter)
-                )
+    #tv diameter
+    diameter = np.linalg.norm(free_wall - septum, axis=-1)
 
-                area = remove_outliers_iqr(area)
-                diast_area = area.max()
-                syst_area = area.min()
+    # calculation of RVEDA and RVESA. It can be done by using the triangle method or the spline method
+    if method == 'triangle': # triangle method
+        
+        semiperimeter = (length_fw + length_septum + diameter) / 2
+        area = np.sqrt(
+            semiperimeter
+            * (semiperimeter - length_fw)
+            * (semiperimeter - length_septum)
+            * (semiperimeter - diameter)
+        )
 
-            elif method == "spline": # calculate the RV area as the area inside the spline through the three points
-                area_diastole = []
-                area_systole = []
-                for fw, ap, sp in zip(free_wall, apex, septum):
-                    # Order points (close loop)
-                    pts = np.vstack([fw, ap, sp, fw])
-                    t = np.arange(len(pts))
+        area = remove_outliers_iqr(area)
+        diast_area = area.max()
+        syst_area = area.min()
 
-                    # Parametric spline
-                    tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
-                    u_new = np.linspace(0, 1, 6)
-                    x_new, y_new = interpolate.splev(u_new, tck)
+    elif method == "spline": # calculate the RV area as the area inside the 3rd degree spline that interpolates the three points
 
-                    # Shoelace formula
-                    poly = np.vstack([x_new, y_new]).T
+        # diastole area method
+        area_diastole = []
+        for fw, ap, sp in zip(free_wall, apex, septum):
+            # Order points (close loop)
+            pts = np.vstack([fw, ap, sp, fw])
+            t = np.arange(len(pts))
 
-                    # plt.figure()
-                    # plt.plot(poly[:,0], poly[:,1], 'o-', label="Spline polygon")
-                    # plt.plot([fw[0], ap[0], sp[0], fw[0]],
-                    #         [fw[1], ap[1], sp[1], fw[1]], 'r--', label="Triangle")
-                    # plt.scatter([fw[0], ap[0], sp[0]], [fw[1], ap[1], sp[1]], c='k', zorder=5)
-                    # plt.axis('equal')
-                    # plt.legend()
-                    # plt.show()
+            # Parametric spline
+            tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
+            u_new = np.linspace(0, 1, 6)
+            x_new, y_new = interpolate.splev(u_new, tck)
 
-                    area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
-                                        np.dot(poly[:,1], np.roll(poly[:,0], -1)))
-                    area_diastole.append(area_i)
-                area_diastole = np.array(area_diastole)
-                
-                for fw, ap, sp in zip(free_wall, apex, septum):
-                    # Order points (close loop)
-                    pts = np.vstack([fw, ap, sp, fw])
-                    t = np.arange(len(pts))
+            # Shoelace formula
+            poly = np.vstack([x_new, y_new]).T
 
-                    # Parametric spline
-                    tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
-                    u_new = np.linspace(0, 1, 5)
-                    x_new, y_new = interpolate.splev(u_new, tck)
+            area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
+                                np.dot(poly[:,1], np.roll(poly[:,0], -1)))
+            area_diastole.append(area_i)
 
-                    # Shoelace formula
-                    poly = np.vstack([x_new, y_new]).T
+        area_diastole = np.array(area_diastole)
+        # remove clear outliers
+        area_diastole = remove_outliers_iqr(area_diastole)
+        # take the maximum value across the heartbeat
+        diast_area = area_diastole.max()
 
-                    # plt.figure()
-                    # plt.plot(poly[:,0], poly[:,1], 'o-', label="Spline polygon")
-                    # plt.plot([fw[0], ap[0], sp[0], fw[0]],
-                    #         [fw[1], ap[1], sp[1], fw[1]], 'r--', label="Triangle")
-                    # plt.scatter([fw[0], ap[0], sp[0]], [fw[1], ap[1], sp[1]], c='k', zorder=5)
-                    # plt.axis('equal')
-                    # plt.legend()
-                    # plt.show()
+        # systole spline method
+        area_systole = []
+        for fw, ap, sp in zip(free_wall, apex, septum):
+            # Order points (close loop)
+            pts = np.vstack([fw, ap, sp, fw])
+            t = np.arange(len(pts))
 
-                    area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
-                                        np.dot(poly[:,1], np.roll(poly[:,0], -1)))
-                    area_systole.append(area_i)
-                area_systole = np.array(area_systole)
+            # Parametric spline
+            tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
+            u_new = np.linspace(0, 1, 5)
+            x_new, y_new = interpolate.splev(u_new, tck)
 
-                area_diastole = remove_outliers_iqr(area_diastole)
-                area_systole = remove_outliers_iqr(area_systole)
-                diast_area = area_diastole.max()
-                syst_area = area_systole.min()
-            else:
-                raise ValueError("method must be 'triangle' or 'spline'")
+            # Shoelace formula
+            poly = np.vstack([x_new, y_new]).T
 
-            rvfac = (diast_area - syst_area) / diast_area * 100
+            area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
+                                np.dot(poly[:,1], np.roll(poly[:,0], -1)))
+            area_systole.append(area_i)
+        
+        #same type of operations as for the diastolic method above
+        area_systole = np.array(area_systole)
+        area_systole = remove_outliers_iqr(area_systole)
+        syst_area = area_systole.min()
 
-            dist_0 = remove_outliers_iqr(dist_0)
-            dist_1 = remove_outliers_iqr(dist_1)
-            dist_2 = remove_outliers_iqr(dist_2)
-            rvldfw = dist_0.max()
-            rvldsep = dist_1.max()
-            rvlsfw = dist_0.min()
-            rvlssep = dist_1.min()
-            rvldmid = dist_2.max()
-            rvlsmid = dist_2.min()
+    else: # errors
+        raise ValueError("method must be 'triangle' or 'spline'")
 
-            rvlsffw = (rvldfw - rvlsfw)/ rvldfw * 100
-            rvlsfsep = (rvldsep - rvlssep)/ rvldsep * 100
-            rvlsfmid = (rvldmid - rvlsmid)/ rvldmid * 100
-            rvlsfglobal = ((rvldfw+rvldsep)-(rvlsfw+rvlssep))/(rvldfw+rvldsep) * 100
+    #calculation of rvfac at each heartbeat
+    rvfac = (diast_area - syst_area) / diast_area * 100
 
-            diameter = remove_outliers_iqr(diameter)
+    #calculation of lengths. 
+    # I put them here and not above because they are needed as a whole (whithout removing outliers) to calculate the area with the triangle method  
+    #fw
+    length_fw = remove_outliers_iqr(length_fw)
+    rvldfw = length_fw.max()
+    rvlsfw = length_fw.min()
 
-            tadd = diameter.max()
-            tasd = diameter.min()
+    #septum length
+    length_septum = remove_outliers_iqr(length_septum)
+    rvldsep = length_septum.max()
+    rvlssep = length_septum.min()
 
+    #apex
+    length_mid = remove_outliers_iqr(length_mid)
+    rvldmid = length_mid.max()
+    rvlsmid = length_mid.min()
 
-        else: # apply filter
+    #calculation of rv longitudinal strains
+    rvlsffw = (rvldfw - rvlsfw)/ rvldfw * 100
+    rvlsfsep = (rvldsep - rvlssep)/ rvldsep * 100
+    rvlsfmid = (rvldmid - rvlsmid)/ rvldmid * 100
+    rvlsfglobal = ((rvldfw+rvldsep)-(rvlsfw+rvlssep))/(rvldfw+rvldsep) * 100
 
-            midpoint = (free_wall_filtered + septum_filtered) / 2
-
-            # Distances from apex
-            dist_0 = np.linalg.norm(free_wall_filtered - apex_filtered, axis=-1)
-            dist_1 = np.linalg.norm(septum_filtered - apex_filtered, axis=-1)
-            dist_2 = np.linalg.norm(midpoint - apex_filtered, axis=-1)
-
-            diameter = np.linalg.norm(free_wall_filtered - septum_filtered, axis=-1)
-
-            if method == "triangle": # calculate the RV area as the area inside the triangle
-                semiperimeter = (dist_0 + dist_1 + diameter) / 2
-                area = np.sqrt(
-                    semiperimeter
-                    * (semiperimeter - dist_0)
-                    * (semiperimeter - dist_1)
-                    * (semiperimeter - diameter)
-                )
-
-                area = remove_outliers_iqr(area)
-                diast_area = area.max()
-                syst_area = area.min()
-
-            elif method == "spline": # calculate the RV area as the area inside the spline through the three points
-                area_diastole = []
-                area_systole = []
-                for fw, ap, sp in zip(free_wall_filtered, apex_filtered, septum_filtered): #loop for diastolic area calculation
-                    # Order points (close loop)
-                    pts = np.vstack([fw, ap, sp, fw])
-                    t = np.arange(len(pts))
-
-                    # Parametric spline
-                    tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
-                    u_new = np.linspace(0, 1, 6)
-                    x_new, y_new = interpolate.splev(u_new, tck)
-
-                    # Shoelace formula
-                    poly = np.vstack([x_new, y_new]).T
-
-                    # plt.figure()
-                    # plt.plot(poly[:,0], poly[:,1], 'o-', label="Spline polygon")
-                    # plt.plot([fw[0], ap[0], sp[0], fw[0]],
-                    #         [fw[1], ap[1], sp[1], fw[1]], 'r--', label="Triangle")
-                    # plt.scatter([fw[0], ap[0], sp[0]], [fw[1], ap[1], sp[1]], c='k', zorder=5)
-                    # plt.axis('equal')
-                    # plt.legend()
-                    # plt.show()
-
-                    area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
-                                        np.dot(poly[:,1], np.roll(poly[:,0], -1)))
-                    area_diastole.append(area_i)
-                area_diastole = np.array(area_diastole)
-                
-                for fw, ap, sp in zip(free_wall_filtered, apex_filtered, septum_filtered): # loop for systole area calculation
-                    # Order points (close loop)
-                    pts = np.vstack([fw, ap, sp, fw])
-                    t = np.arange(len(pts))
-
-                    # Parametric spline
-                    tck, u = interpolate.splprep([pts[:,0], pts[:,1]], s=0, per=True, k=3)
-                    u_new = np.linspace(0, 1, 5)
-                    x_new, y_new = interpolate.splev(u_new, tck)
-
-                    # Shoelace formula
-                    poly = np.vstack([x_new, y_new]).T
-
-                    # plt.figure()
-                    # plt.plot(poly[:,0], poly[:,1], 'o-', label="Spline polygon")
-                    # plt.plot([fw[0], ap[0], sp[0], fw[0]],
-                    #         [fw[1], ap[1], sp[1], fw[1]], 'r--', label="Triangle")
-                    # plt.scatter([fw[0], ap[0], sp[0]], [fw[1], ap[1], sp[1]], c='k', zorder=5)
-                    # plt.axis('equal')
-                    # plt.legend()
-                    # plt.show()
-
-                    area_i = 0.5*np.abs(np.dot(poly[:,0], np.roll(poly[:,1], -1)) -
-                                        np.dot(poly[:,1], np.roll(poly[:,0], -1)))
-                    area_systole.append(area_i)
-                area_systole = np.array(area_systole)
-
-                area_diastole = remove_outliers_iqr(area_diastole)
-                area_systole = remove_outliers_iqr(area_systole)
-                diast_area = area_diastole.max()
-                syst_area = area_systole.min()
-            else:
-                raise ValueError("method must be 'triangle' or 'spline'")
-
-            rvfac = (diast_area - syst_area) / diast_area * 100
-
-            dist_0 = remove_outliers_iqr(dist_0)
-            dist_1 = remove_outliers_iqr(dist_1)
-            dist_2 = remove_outliers_iqr(dist_2)
-            rvldfw = dist_0.max()
-            rvldsep = dist_1.max()
-            rvlsfw = dist_0.min()
-            rvlssep = dist_1.min()
-            rvldmid = dist_2.max()
-            rvlsmid = dist_2.min()
-
-            rvlsffw = (rvldfw - rvlsfw)/ rvldfw * 100
-            rvlsfsep = (rvldsep - rvlssep)/ rvldsep * 100
-            rvlsfmid = (rvldmid - rvlsmid)/ rvldmid * 100
-            rvlsfglobal = ((rvldfw+rvldsep)-(rvlsfw+rvlssep))/(rvldfw+rvldsep) * 100
-
-            diameter = remove_outliers_iqr(diameter)
-
-            tadd = diameter.max()
-            tasd = diameter.min()
-
+    # diameter related calculations
+    diameter = remove_outliers_iqr(diameter)
+    tadd = diameter.max()
+    tasd = diameter.min()
+        
     return (rvfac, 
             diast_area, 
             syst_area, 
@@ -498,9 +384,7 @@ def tric_apex_distance_calculation_best(
     rvldsep_global = RV_length_sep_diast_global.max()
 
     # the other 2 indices that are needed for the calculation are already using the avg filter, so I use them directly
-
     rvlsfglobal = ((rvldfw_calc_global+rvldsep_global)-(rvlsfw+rvlssep))/(rvldfw_calc_global+rvldsep_global) * 100
-
 
     return (rvfac, 
             diast_area, 
@@ -519,15 +403,12 @@ def tric_apex_distance_calculation_best(
             rvlsfglobal,
             rvldfw_calc,
             rvlsfw_calc)
+                
 
 def tapse_calculation(
-    window_kalman,
-    window_avg,
-    window_both,
-    window_unfiltered,
+    window,
     direction = None,
     tapse_calc = 'distance',
-    filter = 'none',
 ):
     """
     Calculate TAPSE (Tricuspid Annular Plane Systolic Excursion) from the coordinates of the septum and free wall.
@@ -535,23 +416,14 @@ def tapse_calculation(
     The pixelsize is a list containing the pixel size in mm for each dimension.
 
     based on the parameter "tapse_calc", the function will calculate the tapse in two different ways:
+    - 'window': np.ndarray (..., 3, 2) containing hte coordinates of fw, septum and apex
     - 'distance': just calculates the maximum distance between the points in the septum and free wall for the time you provide
     - 'projection': projects the points in the direction of the vector and calculates the distance between the maximum and minimum projection for both septum and free wall, then averages them
     """
 
-    # select the coordinates from the passed windows
-    if filter == 'both':
-        coordinates_septum = window_both[:, 1]
-        coordinates_fw = window_both[:,0]
-    elif filter == 'none':
-        coordinates_septum = window_unfiltered[:, 1]
-        coordinates_fw = window_unfiltered[:,0]
-    elif filter == 'kalman':
-        coordinates_septum = window_kalman[:, 1]
-        coordinates_fw = window_kalman[:,0]
-    elif filter == 'avg':
-        coordinates_septum = window_avg[:, 1]
-        coordinates_fw = window_avg[:,0]
+    # select the coordinates from the window
+    coordinates_septum = window[:, 1]
+    coordinates_fw = window[:,0]
 
     if tapse_calc == 'projection' and direction is None:
         raise ValueError("If tapse_calc is 'projection', direction must be provided")

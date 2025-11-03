@@ -30,13 +30,13 @@ def predict_indices(model,
                     patient=None, 
                     save_images=False, 
                     images_path=None, 
-                    threshold=0.8, 
+                    threshold=0.875, 
                     two_dimensional=True, 
                     count_beats=False,
                     area_method = 'triangle',
                     best_combination = False,
-                    threshold_sudden = 20,
-                    best_rvlsffw = False
+                    threshold_sudden = 4, #2 mm
+                    avg_all= False
                     ):
     """Compute indices from a cardiac HDF5 sequence using a trained segmentation model."""
 
@@ -151,11 +151,11 @@ def predict_indices(model,
         # Estimate direction for TAPSE -basically useless, doesnt give good results
         direction = find_parallel_direction(coordinates_array[:, 0]) + find_parallel_direction(coordinates_array[:, 1])
         direction /= np.linalg.norm(direction)
+        index_container = np.zeros((len(beat_start) - 1, 17))
+    else:
+        index_container = np.zeros((len(beat_start) - 1, 19))
 
-    # Compute metrics for each beat
-    index_container = np.zeros((len(beat_start) - 1, 19))
     for i in range(len(beat_start) - 1):
-
         # I need to select a window from the calculated arrays (window = 1 heartbeat)
         window_kalman = filtered_array[beat_start[i]:beat_start[i + 1]] 
         window_unfiltered = coordinates_array[beat_start[i]:beat_start[i + 1]]
@@ -165,7 +165,7 @@ def predict_indices(model,
         # so, since I know how to calculate the indexes if best_combination is passed, while the calculation is different every time when it's not,
         # I create different calculation function to use in both cases
         if best_combination:
-            # TODO: merge the 2 separated functions (tapse vs the rest of the indexes)
+            # TODO: merge the 2 separated functions (tapse vs the rest of the indexes) and reduce conditions
             # calculate shape related indexes
             (rvfac,
             diast_area, 
@@ -198,7 +198,7 @@ def predict_indices(model,
                 window_unfiltered
                 )
             
-        else:
+        elif apply_filter == 'none': # I only pass the window that the functions needs
             # calculate shape related indexes
             (rvfac,
             diast_area, 
@@ -214,66 +214,175 @@ def predict_indices(model,
             rvlsffw, 
             rvlsfsep, 
             rvlsfmid, 
-            rvlsfglobal) = tric_apex_distance_calculation(window_kalman,
-                window_avg,
-                window_both,
+            rvlsfglobal) = tric_apex_distance_calculation(
                 window_unfiltered, 
                 method = area_method,
-                filter = apply_filter,
-                best_combination = best_combination
+                )
+            
+            # calculate tapse
+            (tapse_sep, 
+            tapse_fw) = tapse_calculation(
+                window_unfiltered,
+                tapse_calc=tapse_calc,
+                direction=direction,
+                )
+            
+        elif apply_filter == 'avg': # only pass avg window
+            # calculate shape related indexes
+            (rvfac,
+            diast_area, 
+            syst_area, 
+            rvldfw, 
+            rvldsep, 
+            rvlsfw, 
+            rvlssep,
+            rvldmid, 
+            rvlsmid, 
+            tadd, 
+            tasd, 
+            rvlsffw, 
+            rvlsfsep, 
+            rvlsfmid, 
+            rvlsfglobal) = tric_apex_distance_calculation(
+                window_avg, 
+                method = area_method,
+                )
+            
+            # calculate tapse
+            (tapse_sep, 
+            tapse_fw) = tapse_calculation(
+                window_avg,
+                tapse_calc=tapse_calc,
+                direction=direction,
+                )
+        
+        elif apply_filter == 'kalman':
+            # calculate shape related indexes
+            (rvfac,
+            diast_area, 
+            syst_area, 
+            rvldfw, 
+            rvldsep, 
+            rvlsfw, 
+            rvlssep,
+            rvldmid, 
+            rvlsmid, 
+            tadd, 
+            tasd, 
+            rvlsffw, 
+            rvlsfsep, 
+            rvlsfmid, 
+            rvlsfglobal) = tric_apex_distance_calculation(
+                window_kalman, 
+                method = area_method,
                 )
             
             # calculate tapse
             (tapse_sep, 
             tapse_fw) = tapse_calculation(
                 window_kalman,
-                window_avg,
-                window_both,
-                window_unfiltered,
                 tapse_calc=tapse_calc,
                 direction=direction,
-                filter = apply_filter)
-
-        index_container[i] = [
-            tapse_fw * 1000, 
-            tapse_sep * 1000, 
-            rvfac, 
-            diast_area * 1e4, 
-            syst_area * 1e4,
-            rvldfw * 1000, 
-            rvldsep * 1000, 
-            rvlsfw * 1000, 
-            rvlssep * 1000, 
-            tadd * 1000,
-            tasd * 1000, 
-            rvldmid * 1000, 
-            rvlsmid * 1000, 
+                )
+        
+        elif apply_filter == 'both':
+            # calculate shape related indexes
+            (rvfac,
+            diast_area, 
+            syst_area, 
+            rvldfw, 
+            rvldsep, 
+            rvlsfw, 
+            rvlssep,
+            rvldmid, 
+            rvlsmid, 
+            tadd, 
+            tasd, 
             rvlsffw, 
-            rvlsfglobal,
             rvlsfsep, 
-            rvlsfmid,
-            rvldfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
-            rvlsfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
-        ]
+            rvlsfmid, 
+            rvlsfglobal) = tric_apex_distance_calculation(
+                window_both, 
+                method = area_method,
+                )
+            
+            # calculate tapse
+            (tapse_sep, 
+            tapse_fw) = tapse_calculation(
+                window_both,
+                tapse_calc=tapse_calc,
+                direction=direction,
+                )
+        
+        if not best_combination:
+            index_container[i] = [
+                tapse_fw * 1000, 
+                tapse_sep * 1000, 
+                rvfac, 
+                diast_area * 1e4, 
+                syst_area * 1e4,
+                rvldfw * 1000, 
+                rvldsep * 1000, 
+                rvlsfw * 1000, 
+                rvlssep * 1000, 
+                tadd * 1000,
+                tasd * 1000, 
+                rvldmid * 1000, 
+                rvlsmid * 1000, 
+                rvlsffw, 
+                rvlsfglobal,
+                rvlsfsep, 
+                rvlsfmid,
+            ]
+        else:
+            index_container[i] = [
+                tapse_fw * 1000, 
+                tapse_sep * 1000, 
+                rvfac, 
+                diast_area * 1e4, 
+                syst_area * 1e4,
+                rvldfw * 1000, 
+                rvldsep * 1000, 
+                rvlsfw * 1000, 
+                rvlssep * 1000, 
+                tadd * 1000,
+                tasd * 1000, 
+                rvldmid * 1000, 
+                rvlsmid * 1000, 
+                rvlsffw, 
+                rvlsfglobal,
+                rvlsfsep, 
+                rvlsfmid,
+                rvldfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
+                rvlsfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
+            ]
 
-    if best_combination:
-        result = []
-        for i in range(index_container.shape[1]):
-            if i in [17]: #only for rv strain calculations
-                result.append(index_container[:, i].max())
-            elif i in [0, 8]:
-                result.append(index_container[:, i].mean())
-            elif i in [1, 6, 10, 14, 16]:
-                result.append(index_container[:, i].max())
-            else:
-                result.append(index_container[:, i].min())
-        return np.asarray(result)
-    elif reduction == 'mean' and not best_combination:
-         return index_container.mean(axis=0)
-    elif reduction == 'max' and not best_combination:
-        return index_container.max(axis=0)
-    elif reduction == 'min' and not best_combination:
-        return index_container.min(axis=0)
+           
+    if best_combination: # also extract 2 more indexes that are some intentional overestimations of rvldfw and rvlsfw. these are used later
+        #(in statistical_analysis.py) to calculate rvlsffw and lower the bias
+        # Compute metrics for each beat
+        if not avg_all:
+            # pick the maximum, minimum or mean value based on the index best performance
+            result = []
+            for i in range(index_container.shape[1]):
+                if i in [0, 8]:
+                    result.append(index_container[:, i].mean())
+                elif i in [1, 6, 10, 14, 16, 17]:
+                    result.append(index_container[:, i].max())
+                else:
+                    result.append(index_container[:, i].min())
+            return np.asarray(result)
+        else:
+            return index_container.mean(axis=0)
+     
+    else: # not best_combination, manual selection of the method to use
+        # pick max mean or min value across heartbeats based on specifications
+        if reduction == 'mean' and not best_combination:
+            return index_container.mean(axis=0)
+        elif reduction == 'max' and not best_combination:
+            return index_container.max(axis=0)
+        elif reduction == 'min' and not best_combination:
+            return index_container.min(axis=0)
 
 
 
@@ -291,37 +400,61 @@ def main():
     parser.add_argument('--reduction', type=str, choices=['mean', 'max', 'min'], default='max', help='Reduction method for multiple beats')
     parser.add_argument('--images_path', type=str, default=None, help='Path to save images with keypoints (optional)')
     parser.add_argument('--save_images', action='store_true', help='Save images with keypoints')
-    parser.add_argument('--threshold', type=float, default=0.875, help='Threshold for center of mass detection') # default is 0.8, but must be adjusted based on the threshold used during training
+    parser.add_argument('--threshold', type=float, default=0.875, 
+                        help='Threshold for center of mass detection') # default is 0.875, but must be adjusted based on the threshold used during training
     parser.add_argument('--two_dimensional', action='store_true', help='whether the images are 2d or 3d derived')
     parser.add_argument('--count_beats', action='store_true', help='Print number of detected heartbeats')
-    parser.add_argument('--area_method', type=str, choices=['triangle', 'spline'], default='triangle', help='how to calculate the area inside the triangle')
+    parser.add_argument('--area_method', type=str, choices=['triangle', 'spline'], default='triangle', help='how to calculate the area inside ' \
+    'the triangle')
     parser.add_argument('--best_combination', action='store_true', help='Use best combination of parameters found (overrides other parameters)')
     parser.add_argument('--threshold_avg', type=int, default=4, help='Threshold for avg filter application')
-    parser.add_argument('--best_rvlsffw', action='store_true', help='if the overestimate rvldfw, so that rvlsffw is more similar to the manual one. ' \
-    'Then rvlsffw has to be recalculated as (rvldfw - rvlsfw)/rvldfw*100 from the excel results in the statistical analysis script. Use it in combination with --best_combination.')
+    parser.add_argument('--avg_all', action='store_true', help='if called together with --best combination, ' \
+    'it uses an averaging reduction method instead of "cherry picking" the best method for each index. Ideally,' \
+    ' with a perfect model, this would be the best way to proceed')
     args = parser.parse_args()
 
-    columns = [
-        "tapsefw", 
-        "tapsesep", 
-        "rvfac", 
-        "rvad", 
-        "rvas",
-        "rvldfw", 
-        "rvldsep", 
-        "rvlsfw", 
-        "rvlssep", 
-        "tadd",
-        "tasd", 
-        "rvldmid", 
-        "rvlsmid", 
-        "rvlsffw", 
-        "rvlsfglobal",
-        "rvlsfsep", 
-        "rvlsfmid",
-        "rvldfw (only for rv strain calculation)",
-        "rvlsfw (only for rv strain calculation)",
-    ]
+    if args.best_combination:
+        columns = [
+            "tapsefw", 
+            "tapsesep", 
+            "rvfac", 
+            "rvad", 
+            "rvas",
+            "rvldfw", 
+            "rvldsep", 
+            "rvlsfw", 
+            "rvlssep", 
+            "tadd",
+            "tasd", 
+            "rvldmid", 
+            "rvlsmid", 
+            "rvlsffw", 
+            "rvlsfglobal",
+            "rvlsfsep", 
+            "rvlsfmid",
+            "rvldfw (only for rv strain calculation)",
+            "rvlsfw (only for rv strain calculation)",
+        ]
+    else:
+        columns = [
+            "tapsefw", 
+            "tapsesep", 
+            "rvfac", 
+            "rvad", 
+            "rvas",
+            "rvldfw", 
+            "rvldsep", 
+            "rvlsfw", 
+            "rvlssep", 
+            "tadd",
+            "tasd", 
+            "rvldmid", 
+            "rvlsmid", 
+            "rvlsffw", 
+            "rvlsfglobal",
+            "rvlsfsep", 
+            "rvlsfmid",
+        ]
 
     df = pd.read_excel(args.excel_path)
 
@@ -335,6 +468,7 @@ def main():
     paths = df["path"].dropna().tolist()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    #best model from experiments, change this part (and the landmark calculations from feature maps probably) if you want to use a different model
     model = Unet(depth=args.depth, start_filts=args.filters, num_residuals=args.residuals).to(device)
     model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
     model.eval()
@@ -359,7 +493,7 @@ def main():
                                         area_method = args.area_method,
                                         best_combination = args.best_combination,
                                         threshold_sudden = args.threshold_avg,
-                                        best_rvlsffw = args.best_rvlsffw
+                                        avg_all = args.avg_all
                                       ) # function that predicts indexes froom the h5 file
             row_idx = df.index[df["path"] == path].tolist()
             if not row_idx:
