@@ -8,7 +8,7 @@ import argparse
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
 from models.models import Unet
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
-from postprocessing.indices_calculation import tric_apex_distance_calculation, tric_apex_distance_calculation_best, tapse_calculation, tapse_calculation_best, find_parallel_direction, find_es, find_ed_es_from_distance, indices_calculation
+from postprocessing.indices_calculation import find_parallel_direction, find_es, RVCalculator, RVCalculatorBest
 from postprocessing.kalman_filter import KalmanFilter
 from postprocessing.pan_tompkins import pan_tompkins_detector
 from utils.plot import visualize_image, save_image
@@ -25,14 +25,13 @@ def predict_indices(model,
                     test_path, 
                     apply_filter='none', 
                     device='cpu', 
-                    reduction='max', 
-                    patient=None,  
+                    reduction='max',  
                     threshold=0.875, 
                     two_dimensional=True, 
                     area_method = 'triangle',
                     best_combination = False,
                     threshold_sudden = 4, #2 mm
-                    avg_all= False,
+                    avg_all= False, 
                     ):
     """Compute indices from a cardiac HDF5 sequence using a trained tracking model."""
 
@@ -55,7 +54,6 @@ def predict_indices(model,
     else: # three dimensional
         images = resize_or_crop_image_np_nokeypoints(images.transpose(2, 0, 1))
         images = images / images.max()
-
 
     # Detect R-peaks in ECG
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
@@ -144,7 +142,6 @@ def predict_indices(model,
         index_container = np.zeros((len(beat_start), 17))
 
     count = 0
-
     for i, frame_num in enumerate(beat_start):
         # I need to select a window from the calculated arrays (window = 1 heartbeat)
         if i == len(beat_start)-1: # if it's the last heart-beat
@@ -163,8 +160,8 @@ def predict_indices(model,
             window_avg = coordinates_array_avg[beat_start[i]:beat_start[i + 1]]
 
         # find the es frame based on the maximum and minimum midpoint to apex distance
-        es_pixel = find_es(window_both, direction=direction)
-        ed_pixel = 0 # the end-diastole frame is frame 0 of the window since the window starts with the frame closest to the R-peak
+        es_frame = find_es(window_both, direction=direction)
+        ed_frame = 0 # the end-diastole frame is frame 0 of the window since the window starts with the frame closest to the R-peak
         
         # fold = os.path.join(r"C:\Users\User\Desktop\test_es_ed_direction", patient.split('\\' )[0])
         # for j in range(len(window_both)):
@@ -176,114 +173,69 @@ def predict_indices(model,
         #         save_image(images[count+j], save_folder= fold, cmap='gray')
         # count = count + len(window_both)
 
-        if apply_filter == 'none':
-            window = window_unfiltered
-        elif apply_filter == 'kalman':
-            window = window_kalman
-        elif apply_filter == 'both':
-            window = window_both
-        else: # apply_filter == 'avg'
-            window = window_avg            
+        if not best_combination: # manually select filter, and reduction
+            if apply_filter == 'none':
+                window = window_unfiltered
+            elif apply_filter == 'kalman':
+                window = window_kalman
+            elif apply_filter == 'both':
+                window = window_both
+            else: # apply_filter == 'avg'
+                window = window_avg            
 
-        # calculate shape related indexes
-        (rvfac,
-        diast_area, 
-        syst_area, 
-        rvldfw, 
-        rvldsep, 
-        rvlsfw, 
-        rvlssep,
-        rvldmid, 
-        rvlsmid, 
-        tadd, 
-        tasd, 
-        rvlsffw, 
-        rvlsfsep, 
-        rvlsfmid, 
-        rvlsfglobal,
-        tapse_fw,
-        tapse_sep) = indices_calculation(
-            window[ed_pixel], 
-            window[es_pixel],
-            method = area_method,
-            )
-    
+            # calculate shape related indexes
+            calculator = RVCalculator(window[ed_frame], window[es_frame], method=area_method)
+        else: #best calculation method
+            calculator = RVCalculatorBest(window_unfiltered, window_kalman, window_avg, window_both, ed_frame, es_frame)
+
         # if not best_combination then the array has 17 values (all the indexes)
-        if not best_combination:
-            index_container[i] = [
-                tapse_fw * 1000, 
-                tapse_sep * 1000, 
-                rvfac, 
-                diast_area * 1e4, 
-                syst_area * 1e4,
-                rvldfw * 1000, 
-                rvldsep * 1000, 
-                rvlsfw * 1000, 
-                rvlssep * 1000, 
-                tadd * 1000,
-                tasd * 1000, 
-                rvldmid * 1000, 
-                rvlsmid * 1000, 
-                rvlsffw, 
-                rvlsfglobal,
-                rvlsfsep, 
-                rvlsfmid,
-            ]
-        # otherwise the array also has 2 more values, that are only used in statystical_analysis.py to recalculate some indexes 
-        # (necessary bbecause some indexes are recalculated with some overestimation of other indexes, so I want to extract both the index 
-        # and its overestimation and then use the overestimation to recalcualte the second index)
-        else:
-            index_container[i] = [
-                tapse_fw * 1000, 
-                tapse_sep * 1000, 
-                rvfac, 
-                diast_area * 1e4, 
-                syst_area * 1e4,
-                rvldfw * 1000, 
-                rvldsep * 1000, 
-                rvlsfw * 1000, 
-                rvlssep * 1000, 
-                tadd * 1000,
-                tasd * 1000, 
-                rvldmid * 1000, 
-                rvlsmid * 1000, 
-                rvlsffw, 
-                rvlsfglobal,
-                rvlsfsep, 
-                rvlsfmid,
-                rvldfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
-                rvlsfw_calc * 1000, # this is only used to calculate rv strain (fw) in statistical_analysis.py
-            ]
-    
-
-
-
-           
-    if best_combination: # also extract 2 more indexes that are some intentional overestimations of rvldfw and rvlsfw. these are used later
-        #(in statistical_analysis.py) to calculate rvlsffw and lower the bias
-        # Compute metrics for each beat
+        index_container[i] = [
+            calculator.tapse_fw * 1000, #0
+            calculator.tapse_sep * 1000, #1
+            calculator.rvfac, #2
+            calculator.ed_area * 1e4,#3
+            calculator.es_area * 1e4,#4
+            calculator.ed_len_fw * 1000, #5
+            calculator.ed_len_sep * 1000,#6
+            calculator.es_len_fw * 1000, #7
+            calculator.es_len_sep * 1000, #8
+            calculator.ed_diam * 1000,#9
+            calculator.es_diam * 1000, #10
+            calculator.ed_len_mid * 1000, #11
+            calculator.es_len_mid * 1000, #12
+            calculator.strain_fw, #13
+            calculator.strain_global,#14 
+            calculator.strain_sep,  #15
+            calculator.strain_mid, #16
+        ]
+        
+            
+    if not best_combination:
+        # pick max mean or min value across heartbeats based on specifications
+        if reduction == 'mean':
+            return index_container.mean(axis=0)
+        elif reduction == 'max':
+            return index_container.max(axis=0)
+        elif reduction == 'min':
+            return index_container.min(axis=0)
+        elif reduction == 'median':
+            return np.median(index_container, axis=0)
+    else:
         if not avg_all:
             # pick the maximum, minimum or mean value based on the index best performance
             result = []
             for i in range(index_container.shape[1]):
-                if i in [0, 8]:
+                if i in [5]:
                     result.append(index_container[:, i].mean())
-                elif i in [1, 6, 10, 14, 16, 17]:
+                elif i in [1, 3, 6, 13, 14, 15, 16]:
                     result.append(index_container[:, i].max())
+                elif i in [0, 2, 9, 11]:
+                    result.append(np.median(index_container[:, i]))
                 else:
                     result.append(index_container[:, i].min())
             return np.asarray(result)
         else:
             return index_container.mean(axis=0)
-     
-    else: # not best_combination, manual selection of the method to use
-        # pick max mean or min value across heartbeats based on specifications
-        if reduction == 'mean' and not best_combination:
-            return index_container.mean(axis=0)
-        elif reduction == 'max' and not best_combination:
-            return index_container.max(axis=0)
-        elif reduction == 'min' and not best_combination:
-            return index_container.min(axis=0)
 
 
 
@@ -297,7 +249,7 @@ def main():
     parser.add_argument('--filters', type=int, default=12, help='Number of filters to start')
     parser.add_argument('--residuals', type=int, default=2, help='Number of residual units')
     parser.add_argument('--filter', type = str, choices=['kalman','avg','none', 'both'], help='type of filter to apply')
-    parser.add_argument('--reduction', type=str, choices=['mean', 'max', 'min'], default='max', help='Reduction method for multiple beats')
+    parser.add_argument('--reduction', type=str, choices=['mean', 'max', 'min', 'median'], default='max', help='Reduction method for multiple beats')
     parser.add_argument('--images_path', type=str, default=None, help='Path to save images with keypoints (optional)')
     parser.add_argument('--save_images', action='store_true', help='Save images with keypoints')
     parser.add_argument('--threshold', type=float, default=0.875, 
@@ -314,28 +266,6 @@ def main():
     args = parser.parse_args()
 
     if args.best_combination:
-        columns = [
-            "tapsefw", 
-            "tapsesep", 
-            "rvfac", 
-            "rvad", 
-            "rvas",
-            "rvldfw", 
-            "rvldsep", 
-            "rvlsfw", 
-            "rvlssep", 
-            "tadd",
-            "tasd", 
-            "rvldmid", 
-            "rvlsmid", 
-            "rvlsffw", 
-            "rvlsfglobal",
-            "rvlsfsep", 
-            "rvlsfmid",
-            "rvldfw (only for rv strain calculation)",
-            "rvlsfw (only for rv strain calculation)",
-        ]
-    else:
         columns = [
             "tapsefw", 
             "tapsesep", 
@@ -383,7 +313,6 @@ def main():
                                         apply_filter=args.filter, 
                                         device=device, 
                                         reduction=args.reduction, 
-                                        patient = path,
                                         threshold=args.threshold, 
                                         two_dimensional=args.two_dimensional, 
                                         area_method = args.area_method,

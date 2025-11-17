@@ -17,13 +17,13 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
     #     merged['rvfac_pred'] = (merged['rvad_pred'] - merged['rvas_pred']) / merged['rvad_pred'] * 100
     #     print("RVFACpred calculated and added to DataFrame.")
 
-    if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(merged.columns) and "best_combination" in automatic_path:
-        merged['rvlsffw_pred'] = (merged['rvldfw (only for rv strain calculation)'] - merged['rvlsfw (only for rv strain calculation)']) / merged['rvldfw (only for rv strain calculation)'] * 100
-        print("RVLSFfwpred calculated and added to DataFrame.")
+    # if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(merged.columns) and "best_combination" in automatic_path:
+    #     merged['rvlsffw_pred'] = (merged['rvldfw (only for rv strain calculation)'] - merged['rvlsfw (only for rv strain calculation)']) / merged['rvldfw (only for rv strain calculation)'] * 100
+    #     print("RVLSFfwpred calculated and added to DataFrame.")
 
-    if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
-        merged['rvlsfsep_pred'] = (merged['rvldsep_pred'] - merged['rvlssep_pred']) / merged['rvldsep_pred'] * 100
-        print("RVLSFseppred calculated and added to DataFrame.")
+    # if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
+    #     merged['rvlsfsep_pred'] = (merged['rvldsep_pred'] - merged['rvlssep_pred']) / merged['rvldsep_pred'] * 100
+    #     print("RVLSFseppred calculated and added to DataFrame.")
 
     index_columns = [col for col in predictions.columns if col not in ['id', 'path']]
 
@@ -269,15 +269,20 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         # Reload predictions to avoid accidental modification of merged dataframe
         preds = pd.read_excel(automatic_path)
 
-        # If best_combination mode, recompute updated RVLSF columns before saving
-        if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(preds.columns) and "best_combination" in automatic_path:
-            preds['rvlsffw'] = (preds['rvldfw (only for rv strain calculation)'] - preds['rvlsfw (only for rv strain calculation)']) / preds['rvldfw (only for rv strain calculation)'] * 100
-            print("RVLSFfw recalculated for predictions.xlsx")
+        # # If best_combination mode, recompute updated RVLSF columns before saving
+        # if {'rvlsfw (only for rv strain calculation)', 'rvldfw (only for rv strain calculation)'}.issubset(preds.columns) and "best_combination" in automatic_path:
+        #     preds['rvlsffw'] = (preds['rvldfw (only for rv strain calculation)'] - preds['rvlsfw (only for rv strain calculation)']) / preds['rvldfw (only for rv strain calculation)'] * 100
+        #     print("RVLSFfw recalculated for predictions.xlsx")
 
-        if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
-            # We can extract the recalculated column directly from merged
-            preds['rvlsfsep'] = merged['rvlsfsep_pred'].values
-            print("RVLSFsep recalculated for predictions.xlsx")
+        # if {'rvlssep_pred', 'rvldsep_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
+        #     # We can extract the recalculated column directly from merged
+        #     preds['rvlsfsep'] = merged['rvlsfsep_pred'].values
+        #     print("RVLSFsep recalculated for predictions.xlsx")
+
+        # if {'rvad_pred', 'rvas_pred'}.issubset(merged.columns) and "best_combination" in automatic_path:
+        #     # We can extract the recalculated column directly from merged
+        #     preds['rvfac'] = merged['rvfac_pred'].values
+        #     print("RVFAC recalculated for predictions.xlsx")
 
         # Drop columns used only for internal strain calculations
         cols_to_drop = [

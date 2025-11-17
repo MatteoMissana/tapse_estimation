@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-base_dir = r"2d/results_avg_4_pixels_no_190"
+base_dir = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method'
 targets = [
     "tapsefw", "tapsesep", "rvfac", "rvad", "rvas", "rvldfw", "rvldsep",
     "rvlsfw", "rvlssep", "tadd", "tasd", "rvldmid", "rvlsmid",
@@ -9,7 +9,6 @@ targets = [
 ]
 output_file = os.path.join(base_dir, "bland_altman_summary_no_sudden.xlsx")
 
-# dizionario: target -> lista di dataframe
 results = {t: [] for t in targets}
 
 for folder in os.listdir(base_dir):
@@ -33,12 +32,23 @@ for folder in os.listdir(base_dir):
     except Exception as e:
         print(f"Errore leggendo {excel_path}: {e}")
 
-# scrivi tutto in un unico Excel con più fogli
+def highlight_best(row):
+    if row["subfolder"] == "best_combination":
+        return ["background-color: yellow"] * len(row)
+    else:
+        return [""] * len(row)
+    
 with pd.ExcelWriter(output_file) as writer:
     for t, rows in results.items():
         if rows:
             final_df = pd.concat(rows, ignore_index=True)
-            final_df.to_excel(writer, sheet_name=t, index=False)
+
+            styled = final_df.style.apply(
+                lambda r: highlight_best(r), axis=1
+            )
+
+            styled.to_excel(writer, sheet_name=t, index=False)
 
 print(f"Creato {output_file}")
+
 

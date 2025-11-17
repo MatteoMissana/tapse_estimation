@@ -4,7 +4,7 @@ import sys
 
 
 filter = ['none', 'avg', 'kalman', 'both']
-reduction = ['mean', 'min', 'max']
+reduction = ['mean', 'min', 'max', 'median']
 area_method = ['spline']
 
 folder = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method'

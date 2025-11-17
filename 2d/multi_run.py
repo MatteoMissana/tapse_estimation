@@ -1,20 +1,21 @@
 import os
 import subprocess
+import sys
 
-python_exec = r"C:/Users/vcxr10/anaconda3/python.exe"
-script_path = r"d:/mmissana/tapse_estimation/2d/statystical_analysis.py"
-base_dir = r"2d/results"
+script_path = r"2d/statystical_analysis.py"
+base_dir = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method'
+
 
 # Loop through all subfolders inside base_dir
 for folder in os.listdir(base_dir):
     folder_path = os.path.join(base_dir, folder)
-    if not os.path.isdir(folder_path) or not "best" in folder:
+    if not os.path.isdir(folder_path):
         continue  # skip files
     
     excel_path = os.path.join(folder_path, "best_unet.xlsx")
 
     cmd = [
-        python_exec,
+        sys.executable,
         script_path,
         "--automatic_path", excel_path
     ]

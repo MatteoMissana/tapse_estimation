@@ -189,7 +189,7 @@ def visualize_image(image, points=None):
         plt.scatter(points[:, 0], points[:, 1], c='red', marker='x')
     plt.show()
 
-def save_image(image, points=None, save_folder="visualizations", bold=False):
+def save_image(image, points=None, save_folder="visualizations", bold=False, cmap = 'gray'):
     """
     Saves a 2D image with optional points highlighted to a specified folder.
     If the image is a CuPy array, it is converted to a NumPy array.
@@ -211,7 +211,7 @@ def save_image(image, points=None, save_folder="visualizations", bold=False):
     save_path = os.path.join(save_folder, f"image_{num_images + 1}.png")
     
     # Create the plot
-    plt.imshow(image, cmap='gray')
+    plt.imshow(image, cmap=cmap)
     # plt.colorbar()
     # plt.title("2D Image Visualization")
     plt.axis('off')
