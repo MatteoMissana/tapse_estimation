@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 
-base_dir = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method'
+base_dir = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method_no_190'
 targets = [
     "tapsefw", "tapsesep", "rvfac", "rvad", "rvas", "rvldfw", "rvldsep",
     "rvlsfw", "rvlssep", "tadd", "tasd", "rvldmid", "rvlsmid",

@@ -59,6 +59,7 @@ def predict_indices(model,
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
     beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in r_peaks]
 
+
     # Inference loop
     coordinates_array = np.zeros((len(images), 3, 2))
     for i, im in enumerate(images):
@@ -159,8 +160,9 @@ def predict_indices(model,
             window_both = both_filters_array[beat_start[i]:beat_start[i + 1]]
             window_avg = coordinates_array_avg[beat_start[i]:beat_start[i + 1]]
 
-        # find the es frame based on the maximum and minimum midpoint to apex distance
-        es_frame = find_es(window_both, direction=direction)
+
+        # find the es frame based on the the frame in which the fw is the most distant from ed position (aka frame 0)
+        es_frame = find_es(window_both)
         ed_frame = 0 # the end-diastole frame is frame 0 of the window since the window starts with the frame closest to the R-peak
         
         # fold = os.path.join(r"C:\Users\User\Desktop\test_es_ed_direction", patient.split('\\' )[0])
@@ -264,27 +266,26 @@ def main():
     'it uses an averaging reduction method instead of "cherry picking" the best method for each index. Ideally,' \
     ' with a perfect model, this would be the best way to proceed')
     args = parser.parse_args()
-
-    if args.best_combination:
-        columns = [
-            "tapsefw", 
-            "tapsesep", 
-            "rvfac", 
-            "rvad", 
-            "rvas",
-            "rvldfw", 
-            "rvldsep", 
-            "rvlsfw", 
-            "rvlssep", 
-            "tadd",
-            "tasd", 
-            "rvldmid", 
-            "rvlsmid", 
-            "rvlsffw", 
-            "rvlsfglobal",
-            "rvlsfsep", 
-            "rvlsfmid",
-        ]
+    
+    columns = [
+        "tapsefw", 
+        "tapsesep", 
+        "rvfac", 
+        "rvad", 
+        "rvas",
+        "rvldfw", 
+        "rvldsep", 
+        "rvlsfw", 
+        "rvlssep", 
+        "tadd",
+        "tasd", 
+        "rvldmid", 
+        "rvlsmid", 
+        "rvlsffw", 
+        "rvlsfglobal",
+        "rvlsfsep", 
+        "rvlsfmid",
+    ]
 
     df = pd.read_excel(args.excel_path)
 

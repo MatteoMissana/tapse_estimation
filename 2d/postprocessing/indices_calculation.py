@@ -504,8 +504,8 @@ def find_es(window):
     window: np.ndarray with shape (n, 3, 2) containing the coordinates of the 3 landmarks for each of the frames in an heartbeat
 
     returns:
-    es: index of the frame with the minimum rv length (End Systole). The index is relative to the beginning of the window. It can be also calcu lated from 
-    the maximum projected distance from the fw ed point of the fw es point. 
+    es: index of the frame where the fw annular point is the farthest from its ED position (frame 0). 
+    The index is relative to the beginning of the window.
     '''
     fw = window[:,0]
     distances_from_ed = np.linalg.norm(fw - fw[0], axis = 1)
@@ -513,7 +513,7 @@ def find_es(window):
 
     return es
 
-def find_ed_es_from_distance(window):
+def find_ed_es_from_distance(window): #not used
     '''
     function that calculates the es and ed frames on the whole acquisition. It uses the filtered coordinates to calculate the ta midpoint to apex distance.
     the local minima are es frames, the local maxima are the ed frames. Returns the indexes of these frames.
@@ -585,7 +585,7 @@ class RVCalculator:
             )
 
         elif self.method == "spline":
-            self.ed_area = self._spline_area(self.ed_free_wall, self.ed_apex, self.ed_septum, n_points= 6)
+            self.ed_area = self._spline_area(self.ed_free_wall, self.ed_apex, self.ed_septum, n_points=6)
             self.es_area = self._spline_area(self.es_free_wall, self.es_apex, self.es_septum, n_points= 5)
 
         else:

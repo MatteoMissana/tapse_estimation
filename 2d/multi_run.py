@@ -3,7 +3,7 @@ import subprocess
 import sys
 
 script_path = r"2d/statystical_analysis.py"
-base_dir = r'c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method'
+base_dir = r"C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_es_ed_method\results_2_frames_method"
 
 
 # Loop through all subfolders inside base_dir
