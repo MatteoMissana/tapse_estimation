@@ -36,15 +36,15 @@ def create_grid_with_labels(image_paths, output_path="grid.png"):
 
 # Example usage
 images = [
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\100.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\111.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\140.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\149.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\160.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\170.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\190.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\198.png',
-    r'd:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\199.png'
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\100.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\111.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\140.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\149.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\160.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\170.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\190.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\198.png',
+    r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\199.png'
 ]
 
-create_grid_with_labels(images, r"D:\mmissana\data\images_paper\images_3_2_pred_plus_annotation\grid.png")
+create_grid_with_labels(images, r"C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\images_paper\images_3_2_pred_plus_annotation\grid.png")

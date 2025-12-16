@@ -103,7 +103,7 @@ def create_video(frames_dir, output_path, df, id, black_width=400, fps=5, scale=
 
 
 if __name__ == "__main__":
-    prediction_excel = r"c:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\best_combination\predictions.xlsx"
+    prediction_excel = r"C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\results\results_2_frames_method\best_combination\predictions.xlsx"
     manual_excel = r"c:\Users\User\Desktop\maesurements_jinyang.xlsx"
 
     prediction_folder = r'C:\Users\User\Desktop\illustrative_video'

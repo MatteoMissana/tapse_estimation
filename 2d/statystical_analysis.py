@@ -144,7 +144,7 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         y_margin = 0.3 * (loa_upper - loa_lower)
         plt.ylim(loa_lower - y_margin, loa_upper + y_margin)
 
-        plt.title(f'Bland-Altman Plot for {title}')
+        # plt.title(f'Bland-Altman Plot for {title}')
         plt.xlabel(f'Mean of Annotation and Prediction ({unit})')
         plt.ylabel(f'Difference (Annotation - Prediction) ({unit})')
         plt.grid(True)
@@ -220,7 +220,7 @@ def analysis(manual_path, automatic_path, patient_ids, save_path=None):
         y_margin = 0.3 * (loa_upper - loa_lower)
         plt.ylim(loa_lower - y_margin, loa_upper + y_margin)
 
-        plt.title(f'Bland-Altman Plot for {title}')
+        # plt.title(f'Bland-Altman Plot for {title}')
         plt.xlabel(f'Mean of Annotation and Prediction ({unit})')
         plt.ylabel(f'Difference (Annotation - Prediction) ({unit})')
         plt.grid(True)
@@ -311,8 +311,8 @@ if __name__ == "__main__":
 
     manual_path = r"c:\Users\User\Desktop\maesurements_jinyang.xlsx"
     # automatic_path = r"2d/results/best_unet_filter_distance_max_spline/best_unet.xlsx"
-    # patient_ids = [140, 141, 149, 160, 170, 184, 190, 198      , 100, 106, 111, 135, 199, 920]  # First ones are the one im sure of, other are the ones that weren't annotated
-    # patient_ids = [140, 141, 149, 160, 170, 190, 198      , 100, 111, 199, 920]  # patients ids list (excluded the patients that jinyang told us to exclude)
-    patient_ids = [100, 111, 140, 149, 160, 170, 190, 198, 199, 920]
+
+    #ids of the analyzed patients
+    patient_ids = [100, 111, 140, 149, 160, 170, 190, 198, 199, 920] 
     save_path = args.automatic_path.replace('best_unet.xlsx', '')
     analysis(manual_path, args.automatic_path, patient_ids, save_path)
