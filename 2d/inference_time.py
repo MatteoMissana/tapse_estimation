@@ -72,30 +72,31 @@ args = parser.parse_args()
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # --- CONFIG ---
-PATIENTS = ['100', '111', '140', '149', '160', '170', '190', '198', '199', '920']
+# PATIENTS = ['100', '111', '140', '149', '160', '170', '190', '198', '199', '920'] # test set
+PATIENTS = ['106', '135', '141', '184', '990']  # validation set
 if args.model == 'unet':
-    MODEL_CKPT = r'2d/model_weights/best_unet/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights\best_unet\best_model.pth'
     # --- LOAD MODEL ---
     model = Unet(depth=6, start_filts=16, num_residuals=0).to(device)
     THRESHOLD = 0.875
 elif args.model == 'resnet18':
-    MODEL_CKPT = r'2d/model_weights/best_resnet18/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights/best_resnet18/best_model.pth'
     model = ResNet18Regression().to(device)
 elif args.model == 'resnet34':
-    MODEL_CKPT = r'2d/model_weights/best_resnet34/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights/best_resnet34/best_model.pth'
     model = ResNet34Regression().to(device)
 elif args.model == 'resnet50':
-    MODEL_CKPT = r'2d/model_weights/best_resnet50/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights/best_resnet50/best_model.pth'
     model = ResNet50Regression().to(device)
 elif args.model == 'resnext50':
-    MODEL_CKPT = r'2d/model_weights/best_resnext50/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights/best_resnext50/best_model.pth'
     model = ResNeXt50Regression().to(device)
 elif args.model == "swinunetr":
-    MODEL_CKPT = r'2d/model_weights/best_swin_unetr/best_model.pth'
+    MODEL_CKPT = r'c:\Users\vcxr10\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights/best_swin_unetr/best_model.pth'
     model = SwinUNETR(start_filts=12).to(device)
     THRESHOLD = 0.9
 
-TEST_PATH = r'D:\mmissana\data\RV_PATIENTS\RV_patients_annotated_renamed'
+TEST_PATH = r'c:\Users\vcxr10\Desktop\final_reviewed_dataset'
 
 model.load_state_dict(torch.load(MODEL_CKPT, map_location=device)['model_state_dict'])
 model.eval()

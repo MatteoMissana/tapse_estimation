@@ -1,18 +1,20 @@
 import os
 import h5py
 import numpy as np
-
-dataset_path = r'C:\Users\User\Desktop\final_reviewed_dataset'
-count = 0
+import pandas as pd
 
 
+dataset_path = r'c:\Users\vcxr10\Desktop\NewRVData\RV_patients_out2'
+excel_path = r'c:\Users\vcxr10\Desktop\best_unet.xlsx'
+
+df = pd.read_excel(excel_path)
+
+df.to_excel("file.xlsx", index=False)
 for folder in os.listdir(dataset_path):
-    if folder != '106':
-        folder_path = os.path.join(dataset_path, folder)
-        for file in os.listdir(folder_path):
-            file_path = os.path.join(folder_path, file)
-            with h5py.File(file_path, 'r') as f:
-                data = f['tissue']['data']
-                count = count + data.shape[2]
+    folder_path = os.path.join(dataset_path, folder)
+    for file in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, file)
+        df.loc[len(df), "path"] = os.path.join(folder, file).replace('.h5', '')
 
-print(count)
+df.to_excel(excel_path, index=False)
+    
