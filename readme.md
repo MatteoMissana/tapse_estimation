@@ -16,7 +16,7 @@ To derive these, the approach consists of predicting three anatomical landmarks 
 ## Implemented Pipelines
 
 - **2D**: Individual 2D TEE frames are fed into a model that predicts the three target points per frame.  
-- **2D+T**: Sequences of 64 consecutive frames are fed into a 3D spatiotemporal model, which outputs all three points for each frame simultaneously.  
+- **2D+T**: Sequences of 64 consecutive frames are fed into a 3D spatiotemporal model, which outputs all three points for each frame simultaneously. This is only a prototype that did not work properly
 - **Other**: Not detailed here.
 
 ---
