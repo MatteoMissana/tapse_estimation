@@ -117,9 +117,9 @@ def explore_h5(name, obj):
 
 
 if __name__ == "__main__":
-    prediction_folder = r'C:\Users\User\Desktop\illustrative_video' #path to the folders with the single frames
+    prediction_folder = r'C:\Users\User\Desktop\test_set_with_predictions' #path to the folders with the single frames
     folder = r'C:\Users\User\Desktop\final_reviewed_dataset' #path to the h5 files with requency info
-    output_folder = r'C:\Users\User\Desktop\illustrative_video/videos'
+    output_folder = r'C:\Users\User\Desktop\test_set_with_predictions\videos'
     patients = []
     frequencies = []
     for subfolder in os.listdir(folder):

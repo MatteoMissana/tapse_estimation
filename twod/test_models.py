@@ -13,6 +13,9 @@ from postprocessing.coordinates_calculation_from_masks import center_of_mass
 from models.models import Unet
 
 
+# code to test model on annotated data, and create bocplots with the error distribution
+# the boxplots can be divided by patient or by landmark
+
 def compute_keypoint_distance_stats(predictions, ground_truths):
     if predictions.shape != ground_truths.shape:
         raise ValueError("Shape mismatch: predictions and ground_truths must have the same shape.")
@@ -120,7 +123,7 @@ def process_h5_file_single(
                 ann_points=ann_points,
                 pred_points=pred_points,
                 save_folder=save_path,
-                bold=bold_flag
+                bold=True
             )
 
     if no_sudden_movements:
@@ -150,8 +153,8 @@ def main():
 
 
     model_checkpoint = r'C:\Users\User\OneDrive - Politecnico di Milano\matteo onedrive\OneDrive - Politecnico di Milano\mmissana\relevant_data\model_weights\best_unet\best_model.pth'
-    test_path = r'C:\Users\User\Desktop\final_reviewed_dataset'
-    save_model_path = r"C:\Users\User\Desktop\images_ann_pred"
+    test_path = r"C:\Users\User\Desktop\RV_followup_converted"
+    save_model_path = r"C:\Users\User\Desktop\RV_followup_predictions"
 
     os.makedirs(save_model_path, exist_ok=True)
 

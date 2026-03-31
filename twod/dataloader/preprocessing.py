@@ -257,15 +257,15 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
     Resizes or crops a batch of images and updates corresponding keypoints.
     
     Args:
-        imgs (np.ndarray): Array di shape (N, H, W) contenente N immagini in scala di grigi.
-        keypoints (np.ndarray): Array di shape (N, K, 2) con le coordinate dei keypoints.
-        target_size (tuple): Dimensione target (H, W).
+        imgs (np.ndarray): Array of shape (N, H, W) containing N grayscale images.
+        keypoints (np.ndarray): Array of shape (N, K, 2) with keypoint coordinates.
+        target_size (tuple): Target size (H, W).
 
     Returns:
-        np.ndarray: Batch di immagini ridimensionate/croppate.
-        np.ndarray: Keypoints aggiornati.
+        np.ndarray: Batch of resized/cropped images.
+        np.ndarray: Updated keypoints.
     """
-    N, H, W = imgs.shape  # Numero di immagini e dimensioni originali
+    N, H, W = imgs.shape  # Number of images and original dimensions
     new_imgs = np.zeros((N, target_size[0], target_size[1]), dtype=imgs.dtype)
     new_keypoints = keypoints.copy()
     
@@ -275,7 +275,7 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
         
         h, w = img.shape
         
-        # Se l'immagine è più grande, la crop
+        # If the image is larger, crop it
         if h > target_size[0] and w > target_size[1]:
             crop_h = (h - target_size[0]) // 2
             crop_w = (w - target_size[1]) // 2
@@ -283,7 +283,7 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
             kp[:, 0] -= crop_w
             kp[:, 1] -= crop_h
 
-        # Se l'immagine è più alta che larga, crop + padding
+        # If the image is taller than it is wide, crop + padding
         elif h > target_size[0] and w < target_size[1]:
             crop_h = (h - target_size[0]) // 2
             pad_w1 = (target_size[1] - w) // 2
@@ -293,7 +293,7 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
             kp[:, 1] -= crop_h
             kp[:, 0] += pad_w1
 
-        # Se è più larga che alta, padding + crop
+        # If it is wider than it is tall, padding + crop
         elif h < target_size[0] and w > target_size[1]:
             pad_h1 = (target_size[0] - h) // 2
             pad_h2 = target_size[0] - h - pad_h1
@@ -303,10 +303,10 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
             kp[:, 0] -= crop_w
             kp[:, 1] += pad_h1
 
-        # Se l'immagine è più piccola, padding simmetrico
+        # If the image is smaller, symmetric padding
         else:
             pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1  # Bilancia l'eventuale pixel extra
+            pad_h2 = target_size[0] - h - pad_h1  # Balances any extra pixel
             pad_w1 = (target_size[1] - w) // 2
             pad_w2 = target_size[1] - w - pad_w1
             img = np.pad(img, ((pad_h1, pad_h2), (pad_w1, pad_w2)), mode='constant', constant_values=0)
@@ -320,18 +320,16 @@ def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
 
 def resize_or_crop_image_np_nokeypoints(imgs, target_size=(256, 256)):
     """
-    Resizes or crops a batch of images and updates corresponding keypoints.
+    Resizes or crops a batch of images.
     
     Args:
-        imgs (np.ndarray): Array di shape (N, H, W) contenente N immagini in scala di grigi.
-        keypoints (np.ndarray): Array di shape (N, K, 2) con le coordinate dei keypoints.
-        target_size (tuple): Dimensione target (H, W).
+        imgs (np.ndarray): Array of shape (N, H, W) containing N grayscale images.
+        target_size (tuple): Target size (H, W).
 
     Returns:
-        np.ndarray: Batch di immagini ridimensionate/croppate.
-        np.ndarray: Keypoints aggiornati.
+        np.ndarray: Batch of resized/cropped images.
     """
-    N, H, W = imgs.shape  # Numero di immagini e dimensioni originali
+    N, H, W = imgs.shape  # Number of images and original dimensions
     new_imgs = np.zeros((N, target_size[0], target_size[1]), dtype=imgs.dtype)
     
     for i in range(N):
@@ -339,13 +337,13 @@ def resize_or_crop_image_np_nokeypoints(imgs, target_size=(256, 256)):
         
         h, w = img.shape
         
-        # Se l'immagine è più grande, la crop
+        # If the image is larger, crop it
         if h > target_size[0] and w > target_size[1]:
             crop_h = (h - target_size[0]) // 2
             crop_w = (w - target_size[1]) // 2
             img = img[crop_h:crop_h + target_size[0], crop_w:crop_w + target_size[1]]
 
-        # Se l'immagine è più alta che larga, crop + padding
+        # If the image is taller than it is wide, crop + padding
         elif h > target_size[0] and w < target_size[1]:
             crop_h = (h - target_size[0]) // 2
             pad_w1 = (target_size[1] - w) // 2
@@ -353,7 +351,7 @@ def resize_or_crop_image_np_nokeypoints(imgs, target_size=(256, 256)):
             img = img[crop_h:crop_h + target_size[0], :]
             img = np.pad(img, ((0, 0), (pad_w1, pad_w2)), mode='constant', constant_values=0)
 
-        # Se è più larga che alta, padding + crop
+        # If it is wider than it is tall, padding + crop
         elif h < target_size[0] and w > target_size[1]:
             pad_h1 = (target_size[0] - h) // 2
             pad_h2 = target_size[0] - h - pad_h1
@@ -361,10 +359,10 @@ def resize_or_crop_image_np_nokeypoints(imgs, target_size=(256, 256)):
             img = img[:, crop_w:crop_w + target_size[1]]
             img = np.pad(img, ((pad_h1, pad_h2), (0, 0)), mode='constant', constant_values=0)
 
-        # Se l'immagine è più piccola, padding simmetrico
+        # If the image is smaller, symmetric padding
         else:
             pad_h1 = (target_size[0] - h) // 2
-            pad_h2 = target_size[0] - h - pad_h1  # Bilancia l'eventuale pixel extra
+            pad_h2 = target_size[0] - h - pad_h1  # Balances any extra pixel
             pad_w1 = (target_size[1] - w) // 2
             pad_w2 = target_size[1] - w - pad_w1
             img = np.pad(img, ((pad_h1, pad_h2), (pad_w1, pad_w2)), mode='constant', constant_values=0)

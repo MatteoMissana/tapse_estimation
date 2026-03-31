@@ -3,6 +3,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
 
+# Code to create a confusion matrix from excel file with the predicted and annotated value for indices
+
+
 # === Load data ===
 file_path = r"2d/confusion_matrix_material.xlsx"
 df = pd.read_excel(file_path)

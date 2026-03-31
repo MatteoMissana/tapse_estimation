@@ -1,4 +1,4 @@
-import cupy as cp
+#import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 import numpy as np
@@ -274,9 +274,11 @@ def save_image_ann_pred(image, ann_points=None, pred_points=None, save_folder="v
     if pred_points:
         pred_points = np.array(pred_points)
         if bold:
-            for x, y in pred_points:
-                circle = plt.Circle((x, y), radius=4, color='red', fill=True)
-                plt.gca().add_patch(circle)
+            colors = ['red', 'green', 'blue']
+            for i, (x, y) in enumerate(pred_points):
+                current_color = colors[i]
+                #circle = plt.Circle((x, y), radius=4, color=current_color, fill=True)
+                #plt.gca().add_patch(circle)
         else:
             plt.scatter(pred_points[:, 0], pred_points[:, 1], c='red', marker='o', label='Prediction', s=50)
 

@@ -7,12 +7,15 @@ import argparse
 from models.models import Unet, ResNet18Regression, ResNet34Regression, ResNet50Regression, ResNeXt50Regression, SwinUNETR
 from dataloader.preprocessing import preprocess_images, apply_lut, resize_or_crop_image_np_nokeypoints
 from postprocessing.coordinates_calculation_from_masks import center_of_mass
-
 import torch
+
+# code to calculate the inference time for each of the models of the study
 
 def center_of_mass_three(masks: torch.Tensor, thresh=0.9, device='cpu', normalize=False):
     """
-    Compute center of mass for three masks at once.
+    Compute center of mass for three masks at once. 
+    Needed for U-Net and Swinunetr to extract the 
+    coordinates from the predicted feature maps
     Args:
         masks: Tensor of shape (3, H, W)
         thresh: float threshold for mass clipping
