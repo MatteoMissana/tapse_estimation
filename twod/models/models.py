@@ -9,6 +9,9 @@ sys.path.insert(0, '../..')
 #from dl_mapse.Code.Models import resnet3d
 
 
+# file that contains all the models used in our study
+# Particularly, the Resnets, resnext Unet and swinunetr
+
 class Identity(nn.Module):
     def __init__(self):
         super(Identity, self).__init__()

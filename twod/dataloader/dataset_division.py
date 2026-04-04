@@ -4,6 +4,19 @@ import h5py
 import torch
 from dataloader.preprocessing import resize_or_crop_image_np
 
+
+
+
+# old script to create numpy dataset from files and txt file with the division
+
+
+
+
+
+
+
+
+
 # Function to divide dataset based on a text file containing train/val/test splits
 '''
 The txtfile should be something like this:

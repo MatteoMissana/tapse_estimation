@@ -7,7 +7,7 @@ This repository is designed for the prediction of clinically relevant indices fo
 - **RVFAC** (RV Fractional Area Change)  
 - **RV Diameter**
 
-To derive these, the approach consists of predicting three anatomical landmarks from TEE images:
+To derive these, the approach consists of tracking three anatomical landmarks from TEE images:
 
 1. Free wall tricuspid annulus point  
 2. Septal wall tricuspid annulus point  
@@ -15,10 +15,13 @@ To derive these, the approach consists of predicting three anatomical landmarks 
 
 ## Implemented Pipelines
 
-- **2D**: Individual 2D TEE frames are fed into a model that predicts the three target points per frame.  
-- **2D+T**: Sequences of 64 consecutive frames are fed into a 3D spatiotemporal model, which outputs all three points for each frame simultaneously. This is only a prototype that did not work properly
+- **twod**: Individual 2D TEE frames are fed into a model that predicts and tracks the three target points per frame, and calculates the clinical indices consequently.  
+- **2D+T**: Sequences of 64 consecutive frames are fed into a 3D spatiotemporal model, which outputs all three points for each frame simultaneously.  
 - **Other**: Not detailed here.
 
 ---
 
 See the readme in each folder for detailed info
+
+for everything to  launch this command:
+pip install -e . 

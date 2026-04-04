@@ -1,4 +1,5 @@
 import os
+# just a script to create an incremental path to save things in
 
 def get_experiment_path(base_path="runs/exp"):
     os.makedirs("runs", exist_ok=True)

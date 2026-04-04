@@ -2,7 +2,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch
 
-'''imporved unet based on https://www.sciencedirect.com/science/article/pii/S0169260721000201'''
+'''imporved unet based on https://www.sciencedirect.com/science/article/pii/S0169260721000201
+THIS IS NOT THE UNET MODEL USED IN THE MANUSCRIPT, THAT ONE IS THE MONAI UNET IN /MODELS/MODELS'''
 
 class FirstResidualBlock(nn.Module):
     def __init__(self, in_channels, out_channels):

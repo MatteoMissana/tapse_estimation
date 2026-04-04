@@ -3,6 +3,12 @@ import os
 import numpy as np
 from cleanvision import Imagelab
 
+# This code is thought to clean the dataset from near duplicate images. 
+# It can be used, for example, to avouìid useless annotation by running this before 
+# annotationg, so that most of the information is extracted while doing the least 
+# amount of manual work. IUf the dataset is limited, as in our case, this strategy 
+# is not beneficial, while instead it is for bigger datasets
+
 def create_png_folder(npz_file, png_folder):
     os.makedirs(png_folder, exist_ok=True)
     images = np.load(npz_file)['images']
@@ -36,10 +42,6 @@ def cleanvision(png_folder):
 
     return sorted(indices_to_remove)
 
-    # # Display issues found
-    # duplicate_sets = imagelab.info["exact_duplicates"]["sets"]
-    # print(len(duplicate_sets))
-    # imagelab.issue_summary
 
 if __name__ == "__main__":
     npz_file = r'data/2d_focused_rv/dataset_256/train.npz'

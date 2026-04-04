@@ -9,7 +9,7 @@ import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
 from torchsummary import summary
 
-from dataloader.main import KeypointDataset
+from dataloader.dataset_class import KeypointDataset
 from losses.distances import OrderedDistanceLoss, GaussianKeypointLoss
 from models.tasken_unet import UNet
 from models.weights_initialization import initialize_weights
