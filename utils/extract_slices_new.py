@@ -6,6 +6,12 @@ from utils.plot import visualize_image, VolumeViewer
 from utils.extract_slices import slice_volume_z, signed_angle_between_vectors_gpu, center_volume
 from cupyx.scipy.ndimage import rotate
 
+'''these are all functions used to extract the slices from the 3d images.
+the last one that i used is extract_from_hdf5. It requires the coordinates of 
+2 points, rotates the volume to align z axis to that axis, then asks to select 
+the centre of the tricuspid valve after the rotation and slices the volume with 
+planes parallel to that axis'''
+
 def plane_from_points(p1, p2, p3):
     """Find the equation of the plane ax + by + cz + d = 0 passing through three points."""
     v1, v2 = cp.array(p2) - cp.array(p1), cp.array(p3) - cp.array(p1)

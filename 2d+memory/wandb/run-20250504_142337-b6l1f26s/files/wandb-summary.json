@@ -1,1 +1,0 @@
-{"train_loss": 3.4801880740500115, "val_loss": 5.742119646072387, "learning_rate": 2.7e-06, "_timestamp": 1746363332.344877, "_runtime": 1914.7666370868683, "_step": 12, "test_distance": 4.819026408570536, "test_MSE": 4.819026408570536, "_wandb": {"runtime": 1923}}

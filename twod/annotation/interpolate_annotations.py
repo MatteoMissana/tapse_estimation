@@ -2,6 +2,11 @@ import os
 import numpy as np
 import h5py
 
+'''code that was used to interpolate the annotations. To avoid wasting time, 
+the acquisitions were annotated a frame every two apart from at end-systole and 
+end-diastole. Then this script linearly interpolated the annotations to have a 
+full dataset'''
+
 def interpolate_annotations(annotation_path, save_path):
     annotations = np.load(annotation_path)['annotations']
     for i, image in enumerate(annotations):
