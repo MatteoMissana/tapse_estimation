@@ -60,9 +60,9 @@ def predict_indices(model,
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
     beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in r_peaks]
 
-    if count_beats:
-        # estract number of frames
-        num_frames = len(images)
+    
+    # estract number of frames
+    num_frames = len(images)
 
     # Inference loop
     coordinates_array = np.zeros((len(images), 3, 2))
