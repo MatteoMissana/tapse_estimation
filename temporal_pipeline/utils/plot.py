@@ -1,4 +1,3 @@
-import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 import numpy as np
@@ -168,14 +167,11 @@ class VolumeViewer:
 def visualize_image(image, points=None):
     """
     Displays a 2D image with optional points highlighted.
-    If the image is a CuPy array, it is converted to a NumPy array.
     
     :param image: 2D array representing the image
     :param points: list of tuples (x, y) for the points to highlight in red
     """
-    if isinstance(image, cp.ndarray):
-        image = cp.asnumpy(image)
-    
+
     plt.imshow(image, cmap='gray')
     plt.colorbar()
     plt.title("2D Image Visualization")
@@ -198,8 +194,6 @@ def save_image(image, points=None, save_folder="visualizations"):
     :param points: list of tuples (x, y) for the points to highlight in red
     :param save_folder: folder where the image will be saved, default is 'visualizations'
     """
-    if isinstance(image, cp.ndarray):
-        image = cp.asnumpy(image)
     
     # Make sure the folder exists
     if not os.path.exists(save_folder):

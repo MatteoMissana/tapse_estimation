@@ -1,4 +1,3 @@
-import cupy as cp
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button
 import numpy as np

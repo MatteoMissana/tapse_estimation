@@ -32,6 +32,7 @@ def predict_indices(model,
                     best_combination = False,
                     threshold_sudden = 4, #2 mm
                     avg_all= False, 
+                    count_beats = False,
                     ):
     """Compute indices from a cardiac HDF5 sequence using a trained tracking model."""
 
@@ -59,6 +60,9 @@ def predict_indices(model,
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
     beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in r_peaks]
 
+    if count_beats:
+        # estract number of frames
+        num_frames = len(images)
 
     # Inference loop
     coordinates_array = np.zeros((len(images), 3, 2))
@@ -142,14 +146,16 @@ def predict_indices(model,
     else:
         index_container = np.zeros((len(beat_start), 17))
 
+    # initialize the heart cycles count
     count = 0
     for i, frame_num in enumerate(beat_start):
         # I need to select a window from the calculated arrays (window = 1 heartbeat)
-        if i == len(beat_start)-1: # if it's the last heart-beat
-            if len(coordinates_array) - frame_num < 20: # if the last r peak is too close to the end, i dont consider the last "beat"
+        if i == len(beat_start)-1: # if it's the last R peak in the acquisition I look at how many frames are there left
+            if len(coordinates_array) - frame_num < 20: # if the last r peak is too close to the end, i dont consider the last part
                 print('jump heartbeat')
                 continue
             else: # take the window from last r-peak to the end otherwise
+                
                 window_kalman = filtered_array[beat_start[i]:] 
                 window_unfiltered = coordinates_array[beat_start[i]:]
                 window_both = both_filters_array[beat_start[i]:]
@@ -160,7 +166,8 @@ def predict_indices(model,
             window_both = both_filters_array[beat_start[i]:beat_start[i + 1]]
             window_avg = coordinates_array_avg[beat_start[i]:beat_start[i + 1]]
 
-
+        # increase the count of heart cycles
+        count = count + 1
         # find the es frame based on the the frame in which the fw is the most distant from ed position (aka frame 0)
         es_frame = find_es(window_both)
         ed_frame = 0 # the end-diastole frame is frame 0 of the window since the window starts with the frame closest to the R-peak
@@ -191,7 +198,7 @@ def predict_indices(model,
         else: #best calculation method
             calculator = RVCalculatorBest(window_unfiltered, window_kalman, window_avg, window_both, ed_frame, es_frame)
 
-        # if not best_combination then the array has 17 values (all the indexes)
+        # the array has 17 values (all the indexes)
         index_container[i] = [
             calculator.tapse_fw * 1000, #0
             calculator.tapse_sep * 1000, #1
@@ -225,7 +232,7 @@ def predict_indices(model,
             return np.median(index_container, axis=0)
     else:
         if not avg_all:
-            # pick the maximum, minimum or mean value based on the index best performance
+            # pick the maximum, minimum median or mean value based on the index best performance (I pick a reduction method for each index)
             result = []
             for i in range(index_container.shape[1]):
                 if i in [5]:
@@ -238,9 +245,10 @@ def predict_indices(model,
                     result.append(index_container[:, i].min())
             return np.asarray(result)
         else:
-            return index_container.mean(axis=0)
 
-
+            # print the number oif heart cycles
+            print("Number of heart cycles", count)
+            return count, num_frames, index_container.mean(axis=0)
 
 def main():
     parser = argparse.ArgumentParser(description="Predict RV indices from HDF5 files using a U-Net model.")
@@ -258,9 +266,8 @@ def main():
     parser.add_argument('--threshold', type=float, default=0.875, 
                         help='Threshold for center of mass detection') # default is 0.875, but must be adjusted based on the threshold used during training
     parser.add_argument('--two_dimensional', action='store_true', help='whether the images are 2d or 3d derived')
-    parser.add_argument('--count_beats', action='store_true', help='Print number of detected heartbeats')
-    parser.add_argument('--area_method', type=str, choices=['triangle', 'spline'], default='triangle', help='how to calculate the area inside ' \
-    'the triangle')
+    parser.add_argument('--count_beats', action='store_true', help='Creates an entry in the excel with the number of heartbeats (as calculated by the pipeline) and with the number of frames in the acquisition')
+    parser.add_argument('--area_method', type=str, choices=['triangle', 'spline'], default='triangle', help='how to calculate the area inside the triangle')
     parser.add_argument('--best_combination', action='store_true', help='Use best combination of parameters found (overrides other parameters)')
     parser.add_argument('--threshold_avg', type=int, default=4, help='Threshold for avg filter application')
     parser.add_argument('--avg_all', action='store_true', help='if called together with --best combination, ' \
@@ -269,30 +276,25 @@ def main():
     args = parser.parse_args()
     
     columns = [
-        "tapsefw", 
-        "tapsesep", 
-        "rvfac", 
-        "rvad", 
-        "rvas",
-        "rvldfw", 
-        "rvldsep", 
-        "rvlsfw", 
-        "rvlssep", 
-        "tadd",
-        "tasd", 
-        "rvldmid", 
-        "rvlsmid", 
-        "rvlsffw", 
-        "rvlsfglobal",
-        "rvlsfsep", 
-        "rvlsfmid",
+        "tapsefw", "tapsesep", "rvfac", "rvad", "rvas",
+        "rvldfw", "rvldsep", "rvlsfw", "rvlssep", "tadd",
+        "tasd", "rvldmid", "rvlsmid", "rvlsffw", "rvlsfglobal",
+        "rvlsfsep", "rvlsfmid",
     ]
 
     df = pd.read_excel(args.excel_path)
 
+    # Ensure metric columns exist
     for col in columns:
         if col not in df.columns:
             df[col] = None
+
+    # Initialize beat/frame count columns if the --count_beats flag is active
+    if args.count_beats:
+        if "N heartbeats" not in df.columns:
+            df["N heartbeats"] = None
+        if "N frames" not in df.columns:
+            df["N frames"] = None
 
     if "path" not in df.columns:
         raise ValueError("Excel file must contain a 'path' column.")
@@ -300,7 +302,6 @@ def main():
     paths = df["path"].dropna().tolist()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    #best model from experiments, change this part (and the landmark calculations from feature maps probably) if you want to use a different model
     model = Unet(depth=args.depth, start_filts=args.filters, num_residuals=args.residuals).to(device)
     model.load_state_dict(torch.load(args.model_path, map_location=device)['model_state_dict'])
     model.eval()
@@ -310,31 +311,43 @@ def main():
         print(f"Processing: {test_path}")
 
         try:
-            indexes = predict_indices(model, 
-                                        test_path, 
-                                        apply_filter=args.filter, 
-                                        device=device, 
-                                        reduction=args.reduction, 
-                                        threshold=args.threshold, 
-                                        two_dimensional=args.two_dimensional, 
-                                        area_method = args.area_method,
-                                        best_combination = args.best_combination,
-                                        threshold_sudden = args.threshold_avg,
-                                        avg_all = args.avg_all,
-                                      ) # function that predicts indexes froom the h5 file
+            # function that predicts indexes froom the h5 file
+            n_heartbeats, n_frames, indexes = predict_indices(
+                model, 
+                test_path, 
+                apply_filter=args.filter, 
+                device=device, 
+                reduction=args.reduction, 
+                threshold=args.threshold, 
+                two_dimensional=args.two_dimensional, 
+                area_method=args.area_method,
+                best_combination=args.best_combination,
+                threshold_sudden=args.threshold_avg,
+                avg_all=args.avg_all,
+                count_beats=args.count_beats,
+            ) 
+            
             row_idx = df.index[df["path"] == path].tolist()
             if not row_idx:
                 print(f"Path {path} not found in DataFrame.")
                 continue
+            
             row = row_idx[0]
+            
+            # Fill existing metric columns
             for i, col in enumerate(columns):
                 df.at[row, col] = indexes[i]
+            
+            # Write heartbeats and frames if the --count_beats flag is active
+            if args.count_beats:
+                df.at[row, "N heartbeats"] = n_heartbeats
+                df.at[row, "N frames"] = n_frames
+                
         except Exception as e:
             print(f"Error processing {path}: {e}")
 
     df.to_excel(args.excel_path, index=False)
     print("Excel file updated.")
-
 
 if __name__ == "__main__":
     main()

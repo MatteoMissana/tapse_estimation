@@ -40,3 +40,7 @@ for folder in os.listdir(dcm_path):
 
 df.to_excel(excel_path, index=False)
 
+# select heartbeats of the patients that are NOT excluded from the study
+heartbeat_col = df.loc[~df['id'].isin([100, 160, 170, 920]), 'Heartbeats']
+print(heartbeat_col)
+print ("hello")
