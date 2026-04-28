@@ -3,51 +3,6 @@ import torch.nn as nn
 
 
 
-class OrderedDistanceLoss_3d(nn.Module):
-    def __init__(self, reduction='mean'):
-        """
-        Custom loss function for ordered keypoints.
-        Computes the Euclidean distance between corresponding keypoints in 'pred' and 'target'.
-        Handles inputs of shape (B, N, 3, 2) or (B, 3, 2).
-        """
-        super(OrderedDistanceLoss_3d, self).__init__()
-        self.reduction = reduction
-
-    def forward(self, pred, target):
-        """
-        :param pred: Tensor of predicted keypoints. Shape: (B, N, 3, 2) or (B, 3, 2)
-        :param target: Tensor of ground-truth keypoints. Same shape as pred.
-        :return: Loss value (scalar or per sample)
-        """
-        # Ensure pred and target are 3D: (batch_size * N, 3, 2)
-        # print(f"pred shape: {pred.shape}")
-        if pred.dim() == 4:
-            B, N, P, C = pred.shape  # Usually (1, 64, 3, 2)
-            pred = pred.reshape(-1, P, C)   # Shape: (B*N, 3, 2)
-            target = target.reshape(-1, P, C)
-        elif pred.dim() == 3:
-            # Already in shape (B, 3, 2), nothing to change
-            pass
-        else:
-            raise ValueError(f"Unexpected input shape: {pred.shape}")
-        
-        # print(f"pred shape after: {pred.shape}")
-
-
-        # Compute Euclidean distances
-        distances = torch.linalg.norm(pred - target, ord = 2, dim=2)  # Shape: (B*N, 3)
-
-        # Reduce
-        if self.reduction == 'mean':
-            return distances.mean()
-        elif self.reduction == 'sum':
-            return distances.sum()
-        elif self.reduction == 'max':
-            return distances.max()
-        else:  # 'none'
-            return distances
-
-
 class CombinedLandmarkLoss(nn.Module):
     """
     Combined loss for video landmark tracking.
@@ -266,6 +221,260 @@ class CombinedLandmarkLoss(nn.Module):
             'dist':   loss_dist.item(),
             'motion': loss_motion.item() * self.lambda_motion,
             'var':    loss_var.item()    * self.lambda_var,
+        }
+
+        return total_loss, breakdown
+
+class CombinedLossPenalty(nn.Module):
+    """
+    Combined loss for video landmark tracking with penalty for missing predictions.
+
+    This is identical to CombinedLandmarkLoss, but adds a fixed penalty for each
+    landmark that is not predicted (i.e., where the prediction is NaN). This
+    encourages the model not to make predictions when uncertain.
+
+    Components:
+        1. dist_loss   — standard L2 distance per frame per landmark (valid only)
+        2. motion_loss — supervises frame-to-frame *changes* in position (valid only)
+        3. var_loss    — penalizes predictions that are too static
+        4. missing_penalty — fixed penalty for each NaN prediction
+
+    Args:
+        lambda_motion (float): weight for motion_loss. Default 1.0.
+        lambda_var    (float): weight for var_loss.    Default 0.1.
+        missing_penalty (float): fixed penalty added for each non-predicted
+                                 landmark (NaN in prediction). Default 1.0.
+        reduction     (str):   'mean' or 'sum'.        Default 'mean'.
+
+    Input shapes:
+        pred   : [B, N, 3, 2]  — may contain float('nan') for missing predictions
+        target : [B, N, 3, 2]  — ground-truth, always valid
+    """
+
+    def __init__(self, lambda_motion=1, lambda_var=0.1, missing_penalty=1.0, reduction='mean'):
+        super().__init__()
+        self.lambda_motion = lambda_motion
+        self.lambda_var    = lambda_var
+        self.missing_penalty = missing_penalty
+        self.reduction     = reduction
+
+    # ------------------------------------------------------------------
+    # helpers
+    # ------------------------------------------------------------------
+
+    def _reduce(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply the chosen reduction to a tensor of arbitrary shape."""
+        if self.reduction == 'mean':
+            return x.mean()
+        elif self.reduction == 'sum':
+            return x.sum()
+        return x  # 'none' — return unreduced tensor
+
+    # ------------------------------------------------------------------
+    # loss components
+    # ------------------------------------------------------------------
+
+    def _dist_loss(
+        self,
+        pred:   torch.Tensor,
+        target: torch.Tensor,
+        valid_mask: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Standard per-frame, per-landmark L2 distance loss, computed only
+        over valid (non-NaN) predictions.
+
+        Args:
+            pred, target: [B*N, 3, 2]
+            valid_mask:   [B*N, 3] — True where prediction is valid
+
+        Returns:
+            Scalar loss.
+        """
+        # Euclidean distance per landmark per (sample × frame)
+        distances = torch.linalg.norm(pred - target, ord=2, dim=-1)  # [B*N, 3]
+
+        # Apply mask: set invalid entries to 0 for sum, count them separately
+        # For mean reduction, we need to divide by valid count, not total count
+        masked_distances = distances * valid_mask.float()
+
+        if self.reduction == 'mean':
+            # Count valid entries for proper averaging
+            valid_count = valid_mask.sum()
+            if valid_count > 0:
+                return masked_distances.sum() / valid_count
+            else:
+                return torch.tensor(0.0, device=pred.device, dtype=pred.dtype)
+        else:
+            return masked_distances.sum()
+
+    def _motion_loss(
+        self,
+        pred:   torch.Tensor,
+        target: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Supervise frame-to-frame *motion*, skipping frames where either
+        current or previous frame has NaN for a given landmark.
+
+        Args:
+            pred, target: [B, N, 3, 2]
+
+        Returns:
+            Scalar loss.
+        """
+        # Frame-to-frame displacement vectors — shape: [B, N-1, 3, 2]
+        pred_delta   = pred[:, 1:, :, :] - pred[:, :-1, :, :]
+        target_delta = target[:, 1:, :, :] - target[:, :-1, :, :]
+
+        # Create validity mask for motion: valid only if BOTH t and t-1 are valid
+        # pred shape: [B, N, 3, 2] → valid_pred shape: [B, N, 3]
+        valid_pred = ~torch.isnan(pred[:, :, :, 0])  # [B, N, 3]
+        # Motion is valid if both consecutive frames are valid
+        valid_motion = valid_pred[:, 1:, :] & valid_pred[:, :-1, :]  # [B, N-1, 3]
+
+        # L2 error between predicted and target displacement
+        motion_error = torch.linalg.norm(
+            pred_delta - target_delta, ord=2, dim=-1
+        )  # [B, N-1, 3]
+
+        # Apply mask
+        masked_motion = motion_error * valid_motion.float()
+
+        if self.reduction == 'mean':
+            valid_count = valid_motion.sum()
+            if valid_count > 0:
+                return masked_motion.sum() / valid_count
+            else:
+                return torch.tensor(0.0, device=pred.device, dtype=pred.dtype)
+        else:
+            return masked_motion.sum()
+
+    def _var_loss(
+        self,
+        pred:   torch.Tensor,
+        target: torch.Tensor,
+    ) -> torch.Tensor:
+        """
+        Penalise predictions whose temporal spread is smaller than
+        the ground-truth temporal spread. Computed only over valid frames.
+
+        Args:
+            pred, target: [B, N, 3, 2]
+
+        Returns:
+            Scalar loss.
+        """
+        # Create validity mask: [B, N, 3]
+        valid_pred = ~torch.isnan(pred[:, :, :, 0])
+
+        # Replace NaN with 0 for variance computation
+        pred_filled = pred.clone()
+        pred_filled[~valid_pred] = 0.0
+
+        # Temporal variance per (batch, landmark, coord) — shape: [B, 3, 2]
+        pred_var   = pred_filled.var(dim=1)
+        target_var = target.var(dim=1)
+
+        # Only penalise when predicted variance falls *below* target variance
+        var_deficit = torch.relu(target_var - pred_var)  # [B, 3, 2]
+
+        # Aggregate validity: a landmark is valid if it has at least one valid frame
+        # Shape: [B, N, 3] → [B, 3]
+        valid_landmarks = valid_pred.any(dim=1)  # [B, 3]
+
+        # Expand to match var_deficit shape [B, 3, 2]
+        valid_landmarks = valid_landmarks.unsqueeze(-1).expand(-1, -1, 2)  # [B, 3, 2]
+
+        # Apply mask: set invalid landmarks to 0
+        var_deficit = var_deficit * valid_landmarks.float()
+
+        if self.reduction == 'mean':
+            # Count total valid (landmark, coord) pairs across all batches
+            valid_count = valid_landmarks.sum()  # scalar
+            if valid_count > 0:
+                return var_deficit.sum() / valid_count
+            else:
+                return torch.tensor(0.0, device=pred.device, dtype=pred.dtype)
+        else:
+            return var_deficit.sum()
+
+    # ------------------------------------------------------------------
+    # forward
+    # ------------------------------------------------------------------
+
+    def forward(
+        self,
+        pred:   torch.Tensor,
+        target: torch.Tensor,
+    ) -> tuple[torch.Tensor, dict]:
+        """
+        Args:
+            pred   (Tensor): predicted landmarks, may contain float('nan').
+                             Shape: [B, N, 3, 2]
+            target (Tensor): ground-truth landmarks, always valid.
+                             Shape: [B, N, 3, 2]
+
+        Returns:
+            total_loss (Tensor): scalar, backprop-ready.
+            breakdown  (dict):   {'dist', 'motion', 'var', 'missing'} for logging.
+        """
+        # ── rank normalisation ──────────────────────────────────────────
+        if pred.dim() == 3:
+            pred   = pred.unsqueeze(0)
+            target = target.unsqueeze(0)
+
+        # ── validate ────────────────────────────────────────────────────
+        if pred.dim() != 4 or pred.shape[-2:] != torch.Size([3, 2]):
+            raise ValueError(
+                f"Expected pred shape [B, N, 3, 2] (or [N, 3, 2]), "
+                f"got {pred.shape}"
+            )
+        if pred.shape != target.shape:
+            raise ValueError(
+                f"pred and target shapes must match: "
+                f"{pred.shape} vs {target.shape}"
+            )
+
+        B, N, P, C = pred.shape
+
+        # ── create validity mask ─────────────────────────────────────────
+        # A prediction is valid if it's not NaN
+        valid_mask = ~torch.isnan(pred[:, :, :, 0])  # [B, N, 3]
+
+        # ── component 1: frame-level distance (valid only) ─────────────
+        pred_flat   = pred.reshape(B * N, P, C)
+        target_flat = target.reshape(B * N, P, C)
+        valid_mask_flat = valid_mask.reshape(B * N, P)  # [B*N, 3]
+
+        loss_dist = self._dist_loss(pred_flat, target_flat, valid_mask_flat)
+
+        # ── component 2: motion consistency (valid only) ───────────────
+        loss_motion = self._motion_loss(pred, target)
+
+        # ── component 3: temporal variance penalty ───────────────────────
+        loss_var = self._var_loss(pred, target)
+
+        # ── component 4: missing penalty ─────────────────────────────────
+        # Count total missing predictions and add fixed penalty for each (divided by the total
+        # predictions)
+        num_missing = (~valid_mask).sum()  # scalar
+        loss_missing = num_missing * self.missing_penalty / N 
+
+        # ── combine ──────────────────────────────────────────────────────
+        total_loss = (
+            loss_dist
+            + self.lambda_motion * loss_motion
+            + self.lambda_var    * loss_var
+            + loss_missing
+        )
+
+        # Breakdown dict — weighted values for logging
+        breakdown = {
+            'dist':    loss_dist.item(),
+            'motion':  loss_motion.item() * self.lambda_motion,
+            'var':     loss_var.item()     * self.lambda_var,
+            'missing': loss_missing.item(),
         }
 
         return total_loss, breakdown

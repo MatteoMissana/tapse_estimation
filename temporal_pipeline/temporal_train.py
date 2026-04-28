@@ -10,9 +10,9 @@ import wandb  # Import wandb
 from tqdm import tqdm  # Import tqdm for progress bar
 import h5py
 
-from temporal_pipeline.dataloader.data_prep import RandomClipDataset, RandomClipDataset_v
+from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset
 from temporal_pipeline.models.models import EncoderDecoder
-from temporal_pipeline.losses.distances import OrderedDistanceLoss_3d, CombinedLandmarkLoss
+from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
 from models.weights_initialization import initialize_weights
 
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
@@ -37,8 +37,8 @@ def parse_args():
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
-    parser.add_argument('--augm_version', type=str, default='0', help='augmentation version you want to use')
-    parser.add_argument('--loss', type=str, default='ordered_distance', help='select the type of loss: "MSE" or "distance"')
+    parser.add_argument('--augm_version', type=str, default='8', help='augmentation version you want to use')
+    parser.add_argument('--loss', type=str, default='ordered_distance', help='')
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
@@ -95,7 +95,6 @@ def train_model(model,
 
                 # visualize_image(images[0, 0, 30].cpu().numpy(), points=[tuple(masks[0, 30, 0].tolist()), tuple(masks[0, 30, 1].tolist()), tuple(masks[0, 0, 2].tolist())])
 
-
                 optimizer.zero_grad()
                 # Forward pass
                 outputs = model(images)
@@ -105,6 +104,7 @@ def train_model(model,
                     com_tensor = center_of_mass_3d(outputs, device=device, normalize=False).to(device)
                     
 
+                    print(com_tensor.shape, masks.shape)
                     loss, loss_breakdown = criterion(com_tensor, masks)
                     print(loss_breakdown)
 
@@ -161,8 +161,10 @@ def validate(model, val_loader, criterion):
             
             # Compute center of mass for output masks
             com_tensor = center_of_mass_3d(outputs, device=device, normalize=False).to(device)
-
-            loss = criterion(com_tensor, masks)
+            
+            # calculate the loss: for the validation I use the distance loss, that's 
+            # what I want to minimize
+            loss, _ = criterion(com_tensor, masks)
             val_loss += loss.item()
 
 
@@ -195,8 +197,8 @@ def main():
     test_path = "data/final_reviewed_dataset_for_3d/test"
 
     # Load dataset
-    train_dataset = RandomClipDataset(train_path, clip_length=32, transform='8')
-    val_dataset = RandomClipDataset_v(val_path, clip_length=32)
+    train_dataset = RandomClipDataset(train_path, clip_length=32, transform=args.augm_version)
+    val_dataset = ValidationDataset(val_path, clip_length=32)
 
     # set dataloader parameters
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -226,9 +228,11 @@ def main():
     print(f"model size: {size_all_mb:.3f} MB")
 
     # estabilish the loss
-    criterion = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
-    val_criterion = OrderedDistanceLoss_3d()
+    criterion = CombinedLossPenalty(lambda_motion=.5, lambda_var=0, missing_penalty=20, reduction='mean')
+    val_criterion = CombinedLossPenalty(lambda_motion=.5, lambda_var=0, missing_penalty=20, reduction='mean')
 
+    # set the optimizer. TODO: write the code so that you can experiment with 
+    # different optimizers
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
 
     # set the path where to save model and training. If not specified it 
@@ -249,7 +253,13 @@ def main():
                 args.checkpoint_path, 
                 save_model_path)
 
-    # Run inference on test set
+   
+
+    #Finish wandb run
+    wandb.finish()
+
+if __name__ == "__main__":
+    main() # Run inference on test set
     model.eval()
     test_loader = RandomClipDataset_v(test_path, clip_length=32)
     
@@ -357,9 +367,3 @@ def main():
 
                 # Save results
                 save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-    #Finish wandb run
-    wandb.finish()
-
-if __name__ == "__main__":
-    main()

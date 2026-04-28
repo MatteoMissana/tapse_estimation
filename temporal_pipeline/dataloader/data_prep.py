@@ -89,10 +89,10 @@ class RandomClipDataset(Dataset):
         return clip_acq, clip_ann
     
 
-class RandomClipDataset_v(Dataset):
-    ''' this dataset clas should select sequences of clip_length frames, so as to 
-    train the model to learn movement patterns in the data you feed it.
-
+class ValidationDataset(Dataset):
+    '''
+    Validation dataset that returns all possible non-overlapping clips of length clip_length from each video.
+    Precomputes the mapping from dataset index to (video, start_frame) for efficient access.
     dataset_path: path to the dataset of hdf5 files organized like this:
      -dataset
         -id1
@@ -103,47 +103,45 @@ class RandomClipDataset_v(Dataset):
         id3
         etc.
     clip_length: length of the clips to feed to the model
-    transform: to be added, apply augmentations'''
-
-    def __init__(self, dataset_path, clip_length=64, transform=None):
-        
-        # initialize
+    transform: to be added, apply augmentations
+    '''
+    def __init__(self, dataset_path, clip_length=64):
         self.clip_length = clip_length
-        self.transform = transform
 
-        # initialize the paths of the video files
+        # list of paths of the files
         self.video_files = []
-        
 
+        self.clip_indices = []  # List of (video_idx, start_frame)
+
+        # Gather all video files
         for subfolder in os.listdir(dataset_path):
-            if not subfolder.startswith("."):
+            if not subfolder.startswith('.'):
                 for file in os.listdir(os.path.join(dataset_path, subfolder)):
-                    if not file.startswith("."):
+                    if not file.startswith('.'):
                         self.video_files.append(os.path.join(dataset_path, subfolder, file))
-    
+
+        # Precompute all possible (video_idx, start_frame) pairs: I have to track the idx of the
+        # video and the number of clips i can obtain from that video
+        for vid_idx, video_path in enumerate(self.video_files):
+            with h5py.File(video_path, 'r') as h5_file:
+                # extract numberof frame in the acquisition
+                T = h5_file['annotations'].shape[0]
+            # number of popossible clips
+            n_clips = T // self.clip_length
+            # track the video they belong to and the starting frame of the clip
+            for j in range(n_clips):
+                start = j * self.clip_length
+                self.clip_indices.append((vid_idx, start))
 
     def __len__(self):
-        return len(self.video_files)
+        return len(self.clip_indices)
 
     def __getitem__(self, idx):
-        # load acquisition and annotations
-        with h5py.File(self.video_files[idx], 'r') as h5_file:
-            # extract the number of frames
-            T = h5_file['annotations'].shape[0]
-            
-            # verify the acquisition is long enough
-            if T < self.clip_length:
-                raise ValueError(f"Acquisition too short: {T} < {self.clip_length}")
-
-            # temporal cropping of the acquisition selection of a random index, accounting for 
-            # the length of the clip
-            start = random.randint(0, T - self.clip_length - 1)
-            end = start + self.clip_length
-
-            # clip the acquisitions and the annotations. I'm doing it like this so I don't load 
-            # the entire acquisition in RAM but just the clip I need
-            clip_acq = h5_file['frames'][:, :, start:end]
-            clip_ann = h5_file['annotations'][start:end]
+        vid_idx, start = self.clip_indices[idx]
+        video_path = self.video_files[vid_idx]
+        with h5py.File(video_path, 'r') as h5_file:
+            clip_acq = h5_file['frames'][:, :, start:start+self.clip_length]
+            clip_ann = h5_file['annotations'][start:start+self.clip_length]
 
         # convert to tensors and permute to (N, H, W)
         clip_acq = torch.from_numpy(clip_acq).float()
