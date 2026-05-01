@@ -153,21 +153,21 @@ def center_of_mass_3d_global_threshold(
 ):
     """
     Computes the 2D center of mass for each landmark and frame in a batch of tensors.
-    Unlike center_of_mass_3d which applies a per-channel threshold (thresh × per-channel max),
-    this function applies a GLOBAL threshold: all values below global_thresh are zeroed out.
+    Uses a GLOBAL threshold: global_thresh × (global max across all channels). All values
+    below this threshold are zeroed out.
 
     This is useful when you want a single threshold applied across all feature maps, rather
     than adapting to each channel's own maximum. If after thresholding a feature map becomes
     entirely zero, no prediction is made for that channel (returns NaN). This way the model
-    is allowed not to make a prediction if it's not sure
+    is allowed not to make a prediction if it's not sure.
 
     Args:
         tensor:    Input tensor of shape [N, 3, 32, H, W] (batched)
                    or [3, 32, H, W] / [1, 3, 32, H, W] (single sample).
                    Axis meaning: N=batch, 3=landmarks, 32=frames, H=height, W=width.
-        global_thresh: Global threshold value. All pixels with value < global_thresh
-                       are zeroed out before computing the CoM (default 0.1).
-                       Range should be in the same scale as your tensor values.
+        global_thresh: Fraction of the global max used as threshold (default 0.1).
+                        All pixels with value < (global_thresh × global_max) are zeroed out.
+                        Range: [0, 1].
         device:    Torch device string, e.g. 'cpu' or 'cuda' (default 'cpu').
         normalize: If True, divides x_center by W and y_center by H so coordinates
                    are in [0, 1] (default False).
@@ -202,13 +202,17 @@ def center_of_mass_3d_global_threshold(
     # H, W = spatial dims     (e.g. 256 × 256)
 
     # ------------------------------------------------------------------ #
-    # 2.  GLOBAL threshold: zero out everything below global_thresh.     #
-    #     Unlike center_of_mass_3d which uses per-channel max × thresh,  #
-    #     here we use a single global threshold value for all channels.  #
+    # 2.  GLOBAL threshold: compute global max, then threshold.           #
+    #     Unlike center_of_mass_3d which uses per-channel max × thresh,   #
+    #     here we use global max × global_thresh for ALL channels.        #
     # ------------------------------------------------------------------ #
-    # Apply global threshold: keep values >= global_thresh, zero out below
+    # Compute global max across all dimensions (N, B, C, H, W)
+    global_max = tensor.max()  # scalar
+
+    # Apply global threshold: keep values >= global_thresh × global_max
+    threshold = global_max * global_thresh
     clipped = torch.where(
-        tensor >= global_thresh,
+        tensor >= threshold,
         tensor,
         torch.zeros_like(tensor)
     )

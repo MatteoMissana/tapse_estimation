@@ -15,7 +15,7 @@ from temporal_pipeline.models.models import EncoderDecoder
 from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
 from models.weights_initialization import initialize_weights
 
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
+from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d_global_threshold, center_of_mass_3d
 from dataloader.preprocessing import preprocess_images
 from utils.plot import save_image, visualize_image
 from temporal_pipeline.utils.save import get_experiment_path
@@ -32,6 +32,7 @@ def parse_args():
     parser.add_argument('--patience', type=int, default=20, help='Early stopping patience')
     parser.add_argument('--num_keypoints', type=int, default=3, help='')
     parser.add_argument('--checkpoint_path', type=str, default='checkpoints', help='Path to save model checkpoints')
+    parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
     parser.add_argument('--model', type=str, default='echocoder_2d+t', help='name of the model: supported "U-Net"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
@@ -101,7 +102,7 @@ def train_model(model,
 
                 if args.loss == 'ordered_distance':
                     # Compute center of mass for output masks
-                    com_tensor = center_of_mass_3d(outputs, device=device, normalize=False).to(device)
+                    com_tensor = center_of_mass_3d_global_threshold(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
                     
 
                     print(com_tensor.shape, masks.shape)
@@ -160,7 +161,7 @@ def validate(model, val_loader, criterion):
             outputs = model(images)
             
             # Compute center of mass for output masks
-            com_tensor = center_of_mass_3d(outputs, device=device, normalize=False).to(device)
+            com_tensor = center_of_mass_3d_global_threshold(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
             
             # calculate the loss: for the validation I use the distance loss, that's 
             # what I want to minimize
@@ -192,9 +193,9 @@ def main():
         }
     )
 
-    train_path = "data/final_reviewed_dataset_for_3d/train"
-    val_path = "data/final_reviewed_dataset_for_3d/val"
-    test_path = "data/final_reviewed_dataset_for_3d/test"
+    train_path = args.dataset_path + "train"
+    val_path = args.dataset_path + "val"
+    # test_path = "data/final_reviewed_dataset_for_3d/test"
 
     # Load dataset
     train_dataset = RandomClipDataset(train_path, clip_length=32, transform=args.augm_version)
@@ -260,110 +261,4 @@ def main():
 
 if __name__ == "__main__":
     main() # Run inference on test set
-    model.eval()
-    test_loader = RandomClipDataset_v(test_path, clip_length=32)
     
-    tester = Tester(metric2, metric1)
-    test_distance, test_MSE = tester(model, test_loader, device=device)
-
-        # Log final test results to wandb
-    wandb.summary["test_distance"] = test_distance
-    wandb.summary["test_MSE"] = test_MSE
-
-    if args.save_images:
-
-        os.makedirs(save_model_path, exist_ok=True)
-
-        for images, masks in test_loader:
-            images, masks = images.to(device), masks.to(device)
-
-            outputs = model(images)
-
-            if args.model == '2d_unet':
-                outputs = outputs.view(1, 16, 3, 256, 256)
-            else:
-                outputs = outputs.permute(0, 2, 1, 3,4)  # Rearrange dimensions to match masks
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
-
-            # Compute center of mass for output masks
-            com_tensor = torch.stack([
-                center_of_mass_3d(output, device=device, normalize=False)
-            for output in outputs]).to(device)
-
-            for i, im in enumerate(images[0, 0]):
-                im = im.cpu().numpy()
-                coordinates_1 = com_tensor[0,i,0].cpu().detach().numpy()
-                coordinates_2 = com_tensor[0,i,1].cpu().detach().numpy()
-                coordinates_3 = com_tensor[0,i,2].cpu().detach().numpy()
-
-                # Save results
-                save_image(im, points=[tuple(coordinates_1.tolist()), tuple(coordinates_2.tolist()), tuple(coordinates_3.tolist())], save_folder=save_model_path)
