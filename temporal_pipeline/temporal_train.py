@@ -229,8 +229,8 @@ def main():
     print(f"model size: {size_all_mb:.3f} MB")
 
     # estabilish the loss
-    criterion = CombinedLossPenalty(lambda_motion=.5, lambda_var=0, missing_penalty=20, reduction='mean')
-    val_criterion = CombinedLossPenalty(lambda_motion=.5, lambda_var=0, missing_penalty=20, reduction='mean')
+    criterion = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
+    val_criterion = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0,  reduction='mean')
 
     # set the optimizer. TODO: write the code so that you can experiment with 
     # different optimizers
