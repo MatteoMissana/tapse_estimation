@@ -39,6 +39,7 @@ def parse_args():
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
     parser.add_argument('--augm_version', type=str, default='8', help='augmentation version you want to use')
+    parser.add_argument('--window_len', type=int, default=32, help='number of frames the model receives in input')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='')
     parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save trained model')
@@ -198,8 +199,8 @@ def main():
     # test_path = "data/final_reviewed_dataset_for_3d/test"
 
     # Load dataset
-    train_dataset = RandomClipDataset(train_path, clip_length=32, transform=args.augm_version)
-    val_dataset = ValidationDataset(val_path, clip_length=32)
+    train_dataset = RandomClipDataset(train_path, clip_length=args.window_len, transform=args.augm_version)
+    val_dataset = ValidationDataset(val_path, clip_length=args.window_len)
 
     # set dataloader parameters
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -230,7 +231,9 @@ def main():
 
     # estabilish the loss
     criterion = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
-    val_criterion = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0,  reduction='mean')
+    
+    val_criterion = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0,  
+    reduction='mean') # labda motion set to 0 because I'm only interested in the distance
 
     # set the optimizer. TODO: write the code so that you can experiment with 
     # different optimizers
