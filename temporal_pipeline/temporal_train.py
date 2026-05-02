@@ -102,7 +102,7 @@ def train_model(model,
 
                 if args.loss == 'ordered_distance':
                     # Compute center of mass for output masks
-                    com_tensor = center_of_mass_3d_global_threshold(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
+                    com_tensor = center_of_mass_3d(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
                     
 
                     print(com_tensor.shape, masks.shape)
@@ -161,7 +161,7 @@ def validate(model, val_loader, criterion):
             outputs = model(images)
             
             # Compute center of mass for output masks
-            com_tensor = center_of_mass_3d_global_threshold(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
+            com_tensor = center_of_mass_3d(outputs, global_thresh=0.1, device=device, normalize=False).to(device)
             
             # calculate the loss: for the validation I use the distance loss, that's 
             # what I want to minimize
