@@ -39,7 +39,7 @@ class RandomClipDataset(Dataset):
             if not subfolder.startswith("."):
                 # TODO: see if this makes sense for a publication or if it's better just to have always the same videos
                 # if clip len is 64 I have to exclude some of the videos, since some are smaller than 64 frames 
-                if not self.clip_length == 64 or not ["810", "820", "710"] in subfolder:
+                if self.clip_length != 64 or subfolder not in ["188", "810", "820", "710"]:
                     for file in os.listdir(os.path.join(dataset_path, subfolder)):
                         if not file.startswith("."):
                             self.video_files.append(os.path.join(dataset_path, subfolder, file))

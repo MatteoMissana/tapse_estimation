@@ -89,6 +89,8 @@ def train_model(model,
     for epoch in range(num_epochs):
         print(f"Epoch {epoch + 1}/{num_epochs}")
         running_loss = 0.0
+        train_dist = 0.0
+        train_motion = 0.0
         
         # Use tqdm to create a progress bar for the training loop
         with tqdm(total=len(train_loader), desc=f"Training Epoch {epoch+1}/{num_epochs}", unit="batch") as pbar:
@@ -108,21 +110,31 @@ def train_model(model,
 
                     print(com_tensor.shape, masks.shape)
                     loss, loss_breakdown = criterion(com_tensor, masks)
-                    print(loss_breakdown)
+                    
+                    
 
                 loss.backward()
                 optimizer.step()
 
                 running_loss += loss.item()
+
+                # save total decomposed loss so as to log it into wandb
+                train_dist += loss_breakdown['dist'] 
+                train_motion += loss_breakdown['motion'] 
                 pbar.set_postfix(loss=loss.item())  # Update progress bar with loss
                 pbar.update(1)  # Move progress bar forward
 
+        # calculate avg decomposed loss
         avg_loss = running_loss / len(train_loader)
+        avg_train_dist = train_dist / len(train_loader)
+        avg_train_motion = train_motion / len(train_loader)
+
         val_loss = validate(model, val_loader, val_criterion)
         scheduler(val_loss)
 
         # Log losses to wandb
-        wandb.log({"train_loss": avg_loss, "val_loss": val_loss, "learning_rate": scheduler.currentlr})
+        wandb.log({"train_loss": avg_loss, "val_loss": val_loss, "learning_rate": scheduler.currentlr, 
+        "distance_loss": avg_train_dist, "motion_loss": avg_train_motion})
 
         print(f"Epoch [{epoch + 1}/{num_epochs}], Train Loss: {avg_loss:.4f}, Val Loss: {val_loss:.4f}")
 
