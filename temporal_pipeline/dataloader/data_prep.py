@@ -47,6 +47,8 @@ class RandomClipDataset(Dataset):
 
     def __getitem__(self, idx):
         # idx = idx % len(self.video_files)
+        print(self.video_files[idx])
+        #TODO: exclude acquisitions where you cut some parts
 
         # load acquisition and annotations
         with h5py.File(self.video_files[idx], 'r') as h5_file:
