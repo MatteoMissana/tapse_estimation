@@ -226,6 +226,19 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
         # image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
         image, keypoints = time_flip(image, keypoints, p=.6)
         # TODO: there's a problem: when cropping, the keypoints go out of bounds sometimes
+    elif version == '9':
+        image = adjust_brightness_contrast(image, brightness_range=(0.8, 1.2), contrast_range=(0.8, 1.2))
+        image = add_gaussian_noise(image, std = 0.04)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-15, 15), p=.6)
+        image, keypoints = random_crop(image, keypoints, crop_size=230, p=.6)
+        image, keypoints = time_flip(image, keypoints, p=.6)
+    elif version == '10':
+        image = adjust_brightness_contrast(image, brightness_range=(0.7, 1.3), contrast_range=(0.7, 1.3))
+        image = add_gaussian_noise(image, std = 0.06)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-20, 20), p=.9)
+        image, keypoints = random_crop(image, keypoints, crop_size=230, p=.9)
+        image, keypoints = time_flip(image, keypoints, p=.9)
+        
 
     else:
         raise ValueError(f"Unsupported version: {version}")
