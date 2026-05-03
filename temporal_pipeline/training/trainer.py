@@ -6,6 +6,7 @@ from tqdm import tqdm  # Import tqdm for progress bar
 import wandb
 
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
+from temporal_pipeline.utils.plot import save_image, visualize_image
 
 
 class Trainer:
@@ -132,6 +133,10 @@ class Trainer:
             for images, masks in pbar:
                 images, masks = images.to(self.device), masks.to(self.device)
                 self.optimizer.zero_grad()
+
+                for i in range(10):
+                    visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
+
 
                 # Forward pass
                 outputs = self.model(images)

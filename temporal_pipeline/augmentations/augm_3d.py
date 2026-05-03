@@ -182,6 +182,122 @@ def vertically_align(image, keypoints):
 
     return aligned_sequence, aligned_keypoints.view_as(keypoints)
 
+def coarse_dropout_3d(
+    image_sequence: torch.Tensor,
+    p: float = 0.9,
+    num_patches: int = 10,
+    size_range: tuple[int,int,int] = (6, 30, 30),
+    noise_std: float = 0.08,
+):
+    """
+    Randomly masks small 3D blocks in a clip and fills them with noisy values.
+    image_sequence: [T, H, W]
+    """
+    if torch.rand(1, device=image_sequence.device).item() >= p:
+        return image_sequence
+
+    T, H, W = image_sequence.shape
+    out = image_sequence.clone()
+
+    mean = out.mean()
+    std = out.std(unbiased=False).clamp(min=1e-4)
+
+    for _ in range(num_patches):
+        dt = torch.randint(size_range[0], min(size_range[0] + 1, T) if size_range[0] <= T else T+1, (1,)).item()
+        dh = torch.randint(size_range[1], min(size_range[1] + 1, H) if size_range[1] <= H else H+1, (1,)).item()
+        dw = torch.randint(size_range[2], min(size_range[2] + 1, W) if size_range[2] <= W else W+1, (1,)).item()
+
+        t0 = torch.randint(0, max(1, T - dt + 1), (1,)).item()
+        y0 = torch.randint(0, max(1, H - dh + 1), (1,)).item()
+        x0 = torch.randint(0, max(1, W - dw + 1), (1,)).item()
+
+        noise = torch.randn((dt, dh, dw), device=out.device) * noise_std * std + mean
+        out[t0:t0+dt, y0:y0+dh, x0:x0+dw] = torch.clamp(noise, 0.0, 1.0)
+
+    return out
+
+
+def elastic_deformation(image_sequence, keypoints, alpha=20, sigma=5, p=0.5):
+    """
+    Applies elastic deformation to simulate non-rigid tissue stretching.
+    Uses a random displacement field smoothed with Gaussian blur.
+    
+    - image_sequence: [T, H, W] tensor
+    - keypoints: [T, 2] or similar, but deformation is spatial only
+    - alpha: scaling factor for displacement magnitude
+    - sigma: standard deviation for Gaussian smoothing
+    - p: probability of applying deformation
+    
+    Returns deformed image and adjusted keypoints.
+    """
+    if torch.rand(1, device=image_sequence.device).item() >= p:
+        return image_sequence, keypoints
+    
+    T, H, W = image_sequence.shape
+    device = image_sequence.device
+    
+    # Create displacement field for spatial dimensions
+    # Random displacements
+    dx = torch.randn(H, W, device=device) * alpha
+    dy = torch.randn(H, W, device=device) * alpha
+    
+    # Smooth with Gaussian (simple approximation using convolution)
+    from torch.nn.functional import conv2d
+    kernel_size = int(4 * sigma + 0.5)
+    if kernel_size % 2 == 0:
+        kernel_size += 1
+    # Create Gaussian kernel
+    coords = torch.arange(kernel_size, dtype=torch.float32, device=device)
+    coords -= kernel_size // 2
+    g = torch.exp(-(coords ** 2) / (2 * sigma ** 2))
+    g = g / g.sum()
+    kernel = g[:, None] @ g[None, :]
+    kernel = kernel.expand(1, 1, kernel_size, kernel_size)
+    
+    dx = dx.unsqueeze(0).unsqueeze(0)
+    dy = dy.unsqueeze(0).unsqueeze(0)
+    dx = conv2d(dx, kernel, padding=kernel_size//2).squeeze()
+    dy = conv2d(dy, kernel, padding=kernel_size//2).squeeze()
+    
+    # Create grid
+    y_coords, x_coords = torch.meshgrid(torch.arange(H, device=device), torch.arange(W, device=device), indexing='ij')
+    x_coords = x_coords + dx
+    y_coords = y_coords + dy
+    
+    # Normalize to [-1, 1] for grid_sample
+    x_coords = 2 * x_coords / (W - 1) - 1
+    y_coords = 2 * y_coords / (H - 1) - 1
+    
+    grid = torch.stack([x_coords, y_coords], dim=-1).unsqueeze(0)  # [1, H, W, 2]
+    
+    # Apply to each frame
+    deformed_frames = []
+    for t in range(T):
+        frame = image_sequence[t].unsqueeze(0).unsqueeze(0)  # [1, 1, H, W]
+        deformed = torch.nn.functional.grid_sample(frame, grid, mode='bilinear', padding_mode='border', align_corners=True)
+        deformed_frames.append(deformed.squeeze(0).squeeze(0))
+    
+    deformed_sequence = torch.stack(deformed_frames)
+    
+    # Adjust keypoints: apply the same spatial deformation
+    # keypoints: [T, num_keypoints, 2]
+    kp_deformed = keypoints.clone()
+    for t in range(T):
+        for k in range(keypoints.shape[1]):
+            x, y = keypoints[t, k]
+            # Interpolate displacement at keypoint location
+            x_idx = int(torch.clamp(x, 0, W-1))
+            y_idx = int(torch.clamp(y, 0, H-1))
+            dx_kp = dx[y_idx, x_idx]
+            dy_kp = dy[y_idx, x_idx]
+            kp_deformed[t, k] = torch.tensor([x + dx_kp, y + dy_kp], device=device)
+    
+    # Clamp keypoints to image bounds
+    kp_deformed[..., 0] = kp_deformed[..., 0].clamp(0, W-1)
+    kp_deformed[..., 1] = kp_deformed[..., 1].clamp(0, H-1)
+    
+    return deformed_sequence, kp_deformed
+
 
 def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str = '0'):
     """Apply transformations to an image and its keypoints."""
@@ -238,6 +354,22 @@ def apply_transform(image: torch.Tensor, keypoints: torch.Tensor, version: str =
         image, keypoints = random_rotate(image, keypoints, degrees=(-20, 20), p=.9)
         image, keypoints = random_crop(image, keypoints, crop_size=230, p=.9)
         image, keypoints = time_flip(image, keypoints, p=.9)
+    elif version == '11':
+        image = adjust_brightness_contrast(image, brightness_range=(0.7, 1.3), contrast_range=(0.7, 1.3))
+        image = add_gaussian_noise(image, std = 0.06)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-20, 20), p=.9)
+        image, keypoints = random_crop(image, keypoints, crop_size=230, p=.9)
+        image, keypoints = time_flip(image, keypoints, p=.9)
+        image = coarse_dropout_3d(image)
+        
+    elif version == '12':
+        image = adjust_brightness_contrast(image, brightness_range=(0.7, 1.3), contrast_range=(0.7, 1.3))
+        image = add_gaussian_noise(image, std = 0.06)
+        image, keypoints = random_rotate(image, keypoints, degrees=(-20, 20), p=.9)
+        image, keypoints = random_crop(image, keypoints, crop_size=230, p=.9)
+        image, keypoints = time_flip(image, keypoints, p=.9)
+        image = coarse_dropout_3d(image)
+        image, keypoints = elastic_deformation(image, keypoints, alpha=20, sigma=6, p=0.7)
         
 
     else:

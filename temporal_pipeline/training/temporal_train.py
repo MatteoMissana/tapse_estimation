@@ -8,19 +8,16 @@ import wandb  # Import wandb
 import h5py
 
 # TODO:maybe u have to set numpy seed if a run differs from the same one
-
 from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset
 from temporal_pipeline.models.models import UNet3D
 from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d_global_threshold, center_of_mass_3d
 from temporal_pipeline.training.trainer import Trainer
 from temporal_pipeline.utils.save import get_experiment_path
-from utils.plot import save_image, visualize_image
-
 
 # Argument parser
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train U-Net model for keypoint detection.')
+    parser = argparse.ArgumentParser(description='Train model for temporal window keypoint detection.')
     parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
     parser.add_argument('--stop_patience', type=int, default=20, help='Early stopping patience')
     parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
