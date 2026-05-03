@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision import models
+from monai.networks.nets import UNet
 
 class Identity(nn.Module):
     def __init__(self):
@@ -28,6 +29,29 @@ class Model(nn.Module):
         x = self.network(x)
         return x
 
+
+class UNet3D(nn.Module):
+    def __init__(self, device):
+        super(UNet3D, self).__init__()
+
+        self.device=device
+
+        print("---- Initializing 3D_UNet ----")
+
+        network = UNet(
+                    spatial_dims=3,
+                    in_channels=1,
+                    out_channels=3,
+                    channels=(16, 32, 64, 128, 256),
+                    strides=(2, 2, 2, 2),
+                    num_res_units=2,
+                ).to(self.device)
+
+        self.network = network
+
+    def forward(self, x):
+        x = self.network(x)
+        return x
 
 class EncoderDecoder(nn.Module):
     def __init__(self, seq_len=1):
