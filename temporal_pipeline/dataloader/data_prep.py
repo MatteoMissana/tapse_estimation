@@ -34,38 +34,44 @@ class RandomClipDataset(Dataset):
         # initialize the paths of the video files
         self.video_files = []
 
+        # initialize video lengths
+        self.video_lengths = []
+
         # extract the paths of each sequence
         for subfolder in os.listdir(dataset_path):
             if not subfolder.startswith("."):
                 # TODO: see if this makes sense for a publication or if it's better just to have always the same videos
-                # if clip len is 64 I have to exclude some of the videos, since some are smaller than 64 frames 
-                if self.clip_length != 64 or subfolder not in ["188", "810", "820", "710"]:
+                # now they are being selected based on if one video has the right amount of frames
                     for file in os.listdir(os.path.join(dataset_path, subfolder)):
                         if not file.startswith("."):
-                            self.video_files.append(os.path.join(dataset_path, subfolder, file))
+                            file_path = os.path.join(dataset_path, subfolder, file)
+
+                            # exctract the number of frames in that acquisition
+                            with h5py.File(file_path, 'r') as h5_file:
+                                T = h5_file['annotations'].shape[0]
+
+                            #check if the acquisition has enough frames
+                            if T >= self.clip_length:
+                                # if so, then append the path and the length in two lists, 
+                                # to use them in the __getitem__ function
+                                self.video_lengths.append(T)
+                                self.video_files.append(file_path)
         
 
     def __len__(self):
         return len(self.video_files)
 
     def __getitem__(self, idx):
-        # idx = idx % len(self.video_files)
-        print(self.video_files[idx])
-        #TODO: exclude acquisitions where you cut some parts
+        # extract the number of frames
+        T = self.video_lengths[idx]
+
+        # temporal cropping of the acquisition selection of a random index, 
+        # accounting for the length of the clip
+        start = random.randint(0, T - self.clip_length - 1)
+        end = start + self.clip_length
 
         # load acquisition and annotations
         with h5py.File(self.video_files[idx], 'r') as h5_file:
-            # extract the number of frames
-            T = h5_file['annotations'].shape[0]
-            
-            # verify the acquisition is long enough
-            if T < self.clip_length:
-                raise ValueError(f"Acquisition too short: {T} < {self.clip_length}")
-
-            # temporal cropping of the acquisition selection of a random index, accounting for 
-            # the length of the clip
-            start = random.randint(0, T - self.clip_length - 1)
-            end = start + self.clip_length
 
             # clip the acquisitions and the annotations. I'm doing it like this so I don't load 
             # the entire acquisition in RAM but just the clip I need

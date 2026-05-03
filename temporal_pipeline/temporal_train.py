@@ -108,7 +108,7 @@ def train_model(model,
                     com_tensor = center_of_mass_3d(outputs, device=device, normalize=False).to(device)
                     
 
-                    print(com_tensor.shape, masks.shape)
+                    #print(com_tensor.shape, masks.shape)
                     loss, loss_breakdown = criterion(com_tensor, masks)
                     
                     
