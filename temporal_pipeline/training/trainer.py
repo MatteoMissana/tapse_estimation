@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from pathlib import Path
-from tqdm import tqdm  # Import tqdm for progress bar
+from tqdm import tqdm
 import wandb
 
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
@@ -134,14 +134,10 @@ class Trainer:
                 images, masks = images.to(self.device), masks.to(self.device)
                 self.optimizer.zero_grad()
 
-                for i in range(10):
-                    visualize_image(images[0, 0, i].cpu().numpy(), points=[tuple(masks[0, i, 0].tolist()), tuple(masks[0, i, 1].tolist()), tuple(masks[0, i, 2].tolist())])
-
-
                 # Forward pass
                 outputs = self.model(images)
 
-                if self.model_type == "3D_UNet":
+                if self.model_type in ["3D_UNet", "echocoder"]:
                     # Compute center of mass for output masks
                     com_tensor = center_of_mass_3d(outputs, device=self.device, normalize=False).to(self.device)
                     # Compute the loss
@@ -180,7 +176,7 @@ class Trainer:
             # compute outputs
             outputs = self.model(images)
             
-            if self.model_type == "3D_UNet":
+            if self.model_type in ["3D_UNet", "echocoder"]:
                 # Compute center of mass for output masks
                 com_tensor = center_of_mass_3d(outputs, device=self.device, normalize=False).to(self.device)
             

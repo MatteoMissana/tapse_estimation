@@ -9,7 +9,7 @@ import h5py
 
 # TODO:maybe u have to set numpy seed if a run differs from the same one
 from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset
-from temporal_pipeline.models.models import UNet3D
+from temporal_pipeline.models.models import UNet3D, EncoderDecoder_3d
 from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d_global_threshold, center_of_mass_3d
 from temporal_pipeline.training.trainer import Trainer
@@ -22,7 +22,7 @@ def parse_args():
     parser.add_argument('--stop_patience', type=int, default=20, help='Early stopping patience')
     parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
     parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
-    parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet"')
+    parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
     parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
@@ -86,7 +86,12 @@ def main():
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
-    model = UNet3D(device=device)
+    # select the right model
+    if args.model == "3D_UNet":
+        model = UNet3D(device=device)
+    if args.model == "echocoder":
+        model = EncoderDecoder_3d().to(device)
+    
 
     train_loss = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
     val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
