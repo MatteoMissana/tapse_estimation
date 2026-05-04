@@ -25,11 +25,13 @@ class RandomClipDataset(Dataset):
     clip_length: length of the clips to feed to the model
     transform: version of the augmentation to apply: see temporal_pipeline/augmentations/augm_3d.py'''
 
-    def __init__(self, dataset_path, clip_length=64, transform=None):
+    def __init__(self, dataset_path, clip_length=64, transform=None, smooth_annotations=False, smooth_window=3):
         
         # initialize
         self.clip_length = clip_length
         self.transform = transform
+        self.smooth_annotations = smooth_annotations
+        self.smooth_window = smooth_window
 
         # initialize the paths of the video files
         self.video_files = []
@@ -57,6 +59,27 @@ class RandomClipDataset(Dataset):
                                 self.video_lengths.append(T)
                                 self.video_files.append(file_path)
         
+    def _apply_moving_average(self, annotations, window_size):
+        """Apply moving average smoothing to annotations across time.
+        
+        annotations: [T, num_keypoints, 2] or [T, 3, 2] tensor
+        window_size: size of the moving average window
+        
+        Returns: smoothed annotations of same shape
+        """
+        if window_size < 2:
+            return annotations
+        
+        T = annotations.shape[0]
+        smoothed = annotations.clone()
+        
+        # Apply 1D moving average for each coordinate independently
+        for i in range(T):
+            start_idx = max(0, i - window_size // 2)
+            end_idx = min(T, i + window_size // 2 + 1)
+            smoothed[i] = annotations[start_idx:end_idx].mean(dim=0)
+        
+        return smoothed
 
     def __len__(self):
         return len(self.video_files)
@@ -89,6 +112,10 @@ class RandomClipDataset(Dataset):
 
         # pad or trim images
         clip_acq, clip_ann = resize_or_crop_image_torch(clip_acq, clip_ann)
+
+        # apply moving average smoothing to annotations if requested
+        if self.smooth_annotations:
+            clip_ann = self._apply_moving_average(clip_ann, self.smooth_window)
 
         # apply the image augmentation if requested
         if self.transform:

@@ -36,6 +36,8 @@ def parse_args():
     parser.add_argument('--reduce_factor', type=float, default=0.3, help='Factor by which the learning rate will be reduced by ReduceLROnPlateau. new_lr = lr * factor')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
     parser.add_argument('--wandb', action='store_true', help='if to log results on wandb')
+    parser.add_argument('--smooth_annotations', action='store_true', help='Apply moving average smoothing to annotations')
+    parser.add_argument('--smooth_window', type=int, default=3, help='Window size for moving average smoothing')
 
     return parser.parse_args()
 
@@ -73,14 +75,17 @@ def main():
                 "model": args.model,
                 "augmentation_version": args.augm_version,
                 "loss_type": args.loss,
-                "seed": args.seed
+                "seed": args.seed,
+                "smooth_annotations": args.smooth_annotations,
+                "smooth_window": args.smooth_window,
             }
         )
 
     train_path = os.path.join(args.dataset_path, "train")
     val_path = os.path.join(args.dataset_path, "val")
 
-    train_dataset = RandomClipDataset(train_path, clip_length=args.window_len, transform=args.augm_version)
+    train_dataset = RandomClipDataset(train_path, clip_length=args.window_len, transform=args.augm_version, 
+                                       smooth_annotations=args.smooth_annotations, smooth_window=args.smooth_window)
     val_dataset = ValidationDataset(val_path, clip_length=args.window_len)
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -89,8 +94,10 @@ def main():
     # select the right model
     if args.model == "3D_UNet":
         model = UNet3D(device=device)
-    if args.model == "echocoder":
+    elif args.model == "echocoder":
         model = EncoderDecoder_3d().to(device)
+    else:
+        raise Exception("Insert a valid model type. Accepted: '3D_UNet', 'echocoder'")
     
 
     train_loss = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
