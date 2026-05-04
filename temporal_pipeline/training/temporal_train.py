@@ -23,7 +23,7 @@ def parse_args():
     parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
     parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
-    parser.get_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
+    parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='')
     parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
     parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
