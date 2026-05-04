@@ -33,7 +33,12 @@ class Model(nn.Module):
 
 
 class UNet3D(nn.Module):
-    def __init__(self, device):
+    def __init__(self, 
+        device, 
+        initial_channels=16,
+        strides=(2, 2, 2, 2),
+        num_res_units=2,
+    ):
         super(UNet3D, self).__init__()
 
         self.device=device
@@ -44,9 +49,13 @@ class UNet3D(nn.Module):
                     spatial_dims=3,
                     in_channels=1,
                     out_channels=3,
-                    channels=(16, 32, 64, 128, 256),
-                    strides=(2, 2, 2, 2),
-                    num_res_units=2,
+                    channels=(initial_channels, 
+                    2 * initial_channels, 
+                    4 * initial_channels, 
+                    8 * initial_channels, 
+                    16 * initial_channels),
+                    strides=strides,
+                    num_res_units=num_res_units,
                 ).to(self.device)
 
         self.network = network

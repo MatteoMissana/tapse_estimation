@@ -18,26 +18,27 @@ from temporal_pipeline.utils.save import get_experiment_path
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Train model for temporal window keypoint detection.')
-    parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
-    parser.add_argument('--stop_patience', type=int, default=20, help='Early stopping patience')
-    parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
-    parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
-    parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
-    parser.add_argument('--save_images', action='store_true', help='If to save test images with predictions')
-    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
-    parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
-    parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
     parser.add_argument('--augm_version', type=str, default='8', help='augmentation version you want to use')
-    parser.add_argument('--window_len', type=int, default=32, help='number of frames the model receives in input')
+    parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
+    parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
+    parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
+    parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
+    parser.get_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='')
-    parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
+    parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
+    parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
+    parser.add_argument('--reduce_factor', type=float, default=0.3, help='Factor by which the learning rate will be reduced by ReduceLROnPlateau. new_lr = lr * factor')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save model checkpoints')
     parser.add_argument('--seed', type=int, default=42, help='Random seed')
-    parser.add_argument('--reduce_factor', type=float, default=0.3, help='Factor by which the learning rate will be reduced by ReduceLROnPlateau. new_lr = lr * factor')
-    parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
-    parser.add_argument('--wandb', action='store_true', help='if to log results on wandb')
     parser.add_argument('--smooth_annotations', action='store_true', help='Apply moving average smoothing to annotations')
     parser.add_argument('--smooth_window', type=int, default=3, help='Window size for moving average smoothing')
+    parser.add_argument('--stop_patience', type=int, default=20, help='Early stopping patience')
+    parser.add_argument('--unet_initial_channels', type=int, default=16, help='number of filters in the first layer of the UNet')
+    parser.add_argument('--unet_res_units', type=int, default=2, help='number of residual units the UNet')
+    parser.add_argument('--wandb', action='store_true', help='if to log results on wandb')
+    parser.add_argument('--wandb_entity', type=str, default=None, help='master_thesis_NTNU_mmissana')
+    parser.add_argument('--wandb_project', type=str, default='rv_focused_training', help='tapse')
+    parser.add_argument('--window_len', type=int, default=32, help='number of frames the model receives in input')
 
     return parser.parse_args()
 
@@ -93,7 +94,10 @@ def main():
 
     # select the right model
     if args.model == "3D_UNet":
-        model = UNet3D(device=device)
+        model = UNet3D(device=device,
+        initial_channels=args.unet_initial_channels,
+        num_res_units=args.unet_res_units,
+        )
     elif args.model == "echocoder":
         model = EncoderDecoder_3d().to(device)
     else:
