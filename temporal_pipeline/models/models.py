@@ -60,8 +60,13 @@ class UNet3D(nn.Module):
 
         self.network = network
 
+        self.sigmoid = nn.Sigmoid()
+
     def forward(self, x):
         x = self.network(x)
+        x = self.sigmoid(x)
+        print(x.max())
+        print(x.min())
         return x
 
 class EncoderDecoder_3d(nn.Module):
