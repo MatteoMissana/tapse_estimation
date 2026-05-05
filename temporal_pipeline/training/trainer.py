@@ -5,7 +5,7 @@ from pathlib import Path
 from tqdm import tqdm
 import wandb
 
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d
+from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d, argmax_3d
 from temporal_pipeline.utils.plot import save_image, visualize_image
 
 
@@ -21,6 +21,7 @@ class Trainer:
         checkpoint_dir: str = "checkpoints",
         model_type: str = "3D_UNet", # just to understand how outputs should be processed
         wandb: bool = False,
+        heatmap_training: bool = False,
     ):
         self.model = model.to(device)
         self.model_type = model_type
@@ -32,6 +33,7 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         self.wandb=wandb
+        self.heatmap_training=heatmap_training
 
         self.best_val_loss = float("inf")
 
@@ -134,14 +136,28 @@ class Trainer:
                 images, masks = images.to(self.device), masks.to(self.device)
                 self.optimizer.zero_grad()
 
+                # for i in range(32):
+                #     print(masks.shape)
+                #     img = images[0, 0, i].cpu().numpy()
+                #     mask = masks[0, 1, i].cpu().numpy()
+                #     visualize_image(img + mask)
+            
+
                 # Forward pass
                 outputs = self.model(images)
 
-                if self.model_type in ["3D_UNet", "echocoder"]:
+                if self.model_type in ["3D_UNet", "echocoder"] and not self.heatmap_training:
                     # Compute center of mass for output masks
                     com_tensor = center_of_mass_3d(outputs, device=self.device, normalize=False).to(self.device)
                     # Compute the loss
                     loss, loss_breakdown = self.train_loss_fn(com_tensor, masks)
+                elif self.heatmap_training:
+                    # For heatmap training, use BCE TopK loss directly on outputs
+                    loss = self.train_loss_fn(outputs, masks)
+                    loss_breakdown = {'dist': -1000, 'motion': -1000}  # dummy breakdown
+                else:
+                    raise Exception("you found a bug? This should never happen, signal it to the developers please")# this should never happen
+                    
 
                 # Backward pass
                 loss.backward()
@@ -153,6 +169,12 @@ class Trainer:
                 train_motion += loss_breakdown['motion']
 
                 pbar.set_postfix(loss=loss.item(), refresh=True)
+
+            mask = masks[0, 0, 0].detach().cpu().numpy()
+            visualize_image(mask)
+
+            mask = outputs[0, 0, 0].detach().cpu().numpy()
+            visualize_image(mask)
 
         # calculate avg decomposed loss
         avg_loss = running_loss / len(loader)
@@ -172,17 +194,30 @@ class Trainer:
 
             # put on device
             images, masks = images.to(self.device), masks.to(self.device)
+
+            # for i in range(32):
+            #         print(masks.shape)
+            #         img = images[0, 0, i].cpu().numpy()
+            #         mask = masks[0, 1, i].cpu().numpy()
+            #         visualize_image(img + mask)
             
             # compute outputs
             outputs = self.model(images)
             
-            if self.model_type in ["3D_UNet", "echocoder"]:
+
+            if self.model_type in ["3D_UNet", "echocoder"] and not self.heatmap_training:
                 # Compute center of mass for output masks
                 com_tensor = center_of_mass_3d(outputs, device=self.device, normalize=False).to(self.device)
-            
                 # calculate the loss: for the validation I use the distance loss, that's 
                 # what I want to minimize
                 loss, _ = self.val_loss_fn(com_tensor, masks)
+            elif self.heatmap_training:
+                # For validation, I prefer using the classic euclidean distance metric
+                outputs = argmax_3d(outputs, device=self.device)
+                loss, _ = self.val_loss_fn(outputs, masks)
+            else:
+                raise Exception("you found a bug? This should never happen, signal it to the developers please")# this should never happen
+            
 
             total_loss += loss.item()
 

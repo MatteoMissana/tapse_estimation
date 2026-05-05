@@ -8,20 +8,20 @@ import wandb  # Import wandb
 import h5py
 
 # TODO:maybe u have to set numpy seed if a run differs from the same one
-from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset
+from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset, RandomClipDatasetForActivationMethod
 from temporal_pipeline.models.models import UNet3D, EncoderDecoder_3d
-from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d_global_threshold, center_of_mass_3d
+from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss, HeatmapBCETopKLoss
 from temporal_pipeline.training.trainer import Trainer
 from temporal_pipeline.utils.save import get_experiment_path
 
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Train model for temporal window keypoint detection.')
-    parser.add_argument('--augm_version', type=str, default='8', help='augmentation version you want to use')
+    parser.add_argument('--augm_version', type=str, default='9', help='augmentation version you want to use')
     parser.add_argument('--batch_size', type=int, default=4, help='Batch size for DataLoader')
     parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
     parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
+    parser.add_argument('--heatmap_training', action='store_true', help='Train the model to output a heatmap centered on the landmark')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='')
@@ -85,27 +85,42 @@ def main():
     train_path = os.path.join(args.dataset_path, "train")
     val_path = os.path.join(args.dataset_path, "val")
 
-    train_dataset = RandomClipDataset(train_path, clip_length=args.window_len, transform=args.augm_version, 
-                                       smooth_annotations=args.smooth_annotations, smooth_window=args.smooth_window)
-    val_dataset = ValidationDataset(val_path, clip_length=args.window_len)
+    if args.heatmap_training:
+        # if the model outputs heatmap, the point coordinates need to be given in the form of
+        # heatmaps centered around the landamarks. The loss is the Binary Cross-Entropy (BCE) TopK20 loss
+        # (based on nnLandmark: A Self-Configuring Method for 3D Medical Lanmark Detection)
+        # for the validation I prefer using a normal euclidean distance loss of the predicted points from
+        # the ground truth
+        train_dataset = RandomClipDatasetForActivationMethod(train_path, clip_length=args.window_len, transform=args.augm_version, 
+                                        smooth_annotations=args.smooth_annotations, smooth_window=args.smooth_window)
+        val_dataset = ValidationDataset(val_path, clip_length=args.window_len, return_heatmaps=False)
+
+        train_loss = torch.nn.MSELoss(reduction='mean')
+        val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
+    else:
+        # else the dataset needs to output just the point coordinates, and the loss is distance-based
+        train_dataset = RandomClipDataset(train_path, clip_length=args.window_len, transform=args.augm_version, 
+                                        smooth_annotations=args.smooth_annotations, smooth_window=args.smooth_window)
+        val_dataset = ValidationDataset(val_path, clip_length=args.window_len)
+
+        train_loss = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
+        val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False)
 
     # select the right model
     if args.model == "3D_UNet":
-        model = UNet3D(device=device,
-        initial_channels=args.unet_initial_channels,
-        num_res_units=args.unet_res_units,
+        model = UNet3D(
+            device=device,
+            initial_channels=args.unet_initial_channels,
+            num_res_units=args.unet_res_units,
         )
     elif args.model == "echocoder":
         model = EncoderDecoder_3d().to(device)
     else:
         raise Exception("Insert a valid model type. Accepted: '3D_UNet', 'echocoder'")
     
-
-    train_loss = CombinedLandmarkLoss(lambda_motion=.5, lambda_var=0, reduction='mean')
-    val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
 
     optimizer = optim.Adam(model.parameters(), lr=args.initial_lr, weight_decay=1e-5)
 
@@ -127,6 +142,7 @@ def main():
         checkpoint_dir=save_model_path,
         model_type=args.model,
         wandb=args.wandb,
+        heatmap_training = args.heatmap_training,
     )
 
     history = trainer.fit(

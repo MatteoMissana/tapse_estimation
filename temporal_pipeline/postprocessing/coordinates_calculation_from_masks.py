@@ -282,3 +282,52 @@ def center_of_mass_3d_global_threshold(
     coords = coords.permute(0, 2, 1, 3)   # [N, C, B, 2]
 
     return coords
+
+
+def argmax_3d(tensor: torch.Tensor, device='cpu', normalize=False):
+    """
+    Computes the argmax coordinates for each landmark and frame in a batch of heatmaps.
+    Takes the channel-wise maximum position.
+
+    Args:
+        tensor:    Input tensor of shape [N, 3, 32, H, W] (batched)
+                   or [3, 32, H, W] / [1, 3, 32, H, W] (single sample).
+                   Axis meaning: N=batch, 3=landmarks, 32=frames, H=height, W=width.
+        device:    Torch device string, e.g. 'cpu' or 'cuda' (default 'cpu').
+        normalize: If True, divides x by W and y by H so coordinates are in [0, 1].
+
+    Returns:
+        coords:    Float tensor of shape [N, C, B, 2], where
+                   N = batch size, C = frames (32), B = landmarks (3), 2 = (x, y).
+    """
+    # Normalize rank
+    if tensor.ndim == 4:
+        tensor = tensor.unsqueeze(0)
+
+    if tensor.ndim != 5:
+        raise ValueError(f"Expected 4-D or 5-D tensor, got {tensor.shape}")
+
+    tensor = tensor.float().to(device)
+    N, B, C, H, W = tensor.shape
+
+    # Flatten spatial dims for argmax
+    flat_tensor = tensor.view(N, B, C, -1)  # [N, B, C, H*W]
+
+    # Argmax indices
+    argmax_indices = flat_tensor.argmax(dim=-1)  # [N, B, C]
+
+    # Convert flat indices to (y, x)
+    y_coords = argmax_indices // W
+    x_coords = argmax_indices % W
+
+    # Stack to [N, B, C, 2]
+    coords = torch.stack([x_coords.float(), y_coords.float()], dim=-1)
+
+    if normalize:
+        coords[..., 0] /= W
+        coords[..., 1] /= H
+
+    # Permute to [N, C, B, 2]
+    coords = coords.permute(0, 2, 1, 3)
+
+    return coords

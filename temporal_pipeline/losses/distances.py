@@ -1,6 +1,59 @@
 import torch
 import torch.nn as nn
 
+class HeatmapBCETopKLoss(nn.Module):
+    """
+    Binary Cross-Entropy loss with Top-K selection for heatmap regression.
+
+    Computes BCE loss between predicted and target heatmaps, then selects
+    the top K% of the highest loss values to focus on challenging voxels.
+    This mitigates foreground-background imbalance in sparse landmark heatmaps.
+
+    Args:
+        top_k_percent (float): Fraction of highest loss values to keep (default 0.2 for 20%).
+        reduction (str): 'mean' or 'sum' for final aggregation (default 'mean').
+
+    Input shapes:
+        pred, target: [B, num_keypoints, T, H, W] — heatmaps in [0,1].
+    """
+
+    def __init__(self, top_k_percent=0.2, reduction='mean'):
+        super().__init__()
+        self.top_k_percent = top_k_percent
+        self.reduction = reduction
+        self.bce = nn.BCELoss(reduction='none')
+
+    def forward(self, pred, target):
+        """
+        Args:
+            pred   (Tensor): predicted heatmaps [B, num_keypoints, T, H, W]
+            target (Tensor): target heatmaps [B, num_keypoints, T, H, W]
+
+        Returns:
+            loss (Tensor): scalar loss value
+        """
+        # Compute element-wise BCE loss
+        loss = self.bce(pred, target)  # [B, num_keypoints, T, H, W]
+
+        # Flatten all losses into a 1D tensor
+        loss_flat = loss.flatten()  # [total_elements]
+
+        # Number of elements to select: top K%
+        num_elements = loss_flat.numel()
+        k = max(1, int(num_elements * self.top_k_percent))  # at least 1
+
+        # Select the top K highest losses
+        top_k_losses = torch.topk(loss_flat, k, largest=True).values
+
+        # Aggregate the selected losses
+        if self.reduction == 'mean':
+            return top_k_losses.mean()
+        elif self.reduction == 'sum':
+            return top_k_losses.sum()
+        else:
+            return top_k_losses  # unreduced
+
+
 
 
 class CombinedLandmarkLoss(nn.Module):
