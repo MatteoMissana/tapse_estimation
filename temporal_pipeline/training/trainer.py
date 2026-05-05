@@ -22,6 +22,12 @@ class Trainer:
         model_type: str = "3D_UNet", # just to understand how outputs should be processed
         wandb: bool = False,
         heatmap_training: bool = False,
+        train_dataset=None,
+        val_dataset=None,
+        heatmap_initial_radius: int | None = None,
+        heatmap_radius_step: int = 0,
+        heatmap_radius_step_epochs: int = 0,
+        heatmap_radius_min: int = 1,
     ):
         self.model = model.to(device)
         self.model_type = model_type
@@ -32,8 +38,15 @@ class Trainer:
         self.scheduler = scheduler
         self.checkpoint_dir = Path(checkpoint_dir)
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        self.wandb=wandb
-        self.heatmap_training=heatmap_training
+        self.wandb = wandb
+        self.heatmap_training = heatmap_training
+        self.train_dataset = train_dataset
+        self.val_dataset = val_dataset
+        self.heatmap_initial_radius = heatmap_initial_radius
+        self.heatmap_radius_step = heatmap_radius_step
+        self.heatmap_radius_step_epochs = heatmap_radius_step_epochs
+        self.heatmap_radius_min = heatmap_radius_min
+        self.current_heatmap_radius = heatmap_initial_radius
 
         self.best_val_loss = float("inf")
 
@@ -44,6 +57,30 @@ class Trainer:
     # ------------------------------------------------------------------
     # Core loop
     # ------------------------------------------------------------------
+
+    def _adjust_heatmap_radius(self, epoch: int) -> None:
+        if not self.heatmap_training:
+            return
+
+        if self.train_dataset is None or self.heatmap_initial_radius is None:
+            return
+
+        if self.heatmap_radius_step_epochs <= 0:
+            return
+
+        steps = (epoch - 1) // self.heatmap_radius_step_epochs
+        new_radius = max(
+            self.heatmap_radius_min,
+            self.heatmap_initial_radius - steps * self.heatmap_radius_step,
+        )
+
+        if new_radius != self.current_heatmap_radius:
+            self.current_heatmap_radius = new_radius
+            if hasattr(self.train_dataset, "set_activation_radius"):
+                self.train_dataset.set_activation_radius(new_radius)
+            elif hasattr(self.train_dataset, "activation_radius"):
+                self.train_dataset.activation_radius = int(new_radius)
+            print(f"Heatmap radius adjusted to {new_radius} at epoch {epoch}.")
 
     def fit(
         self,
@@ -57,6 +94,9 @@ class Trainer:
         for epoch in range(1, epochs + 1):
             # print epoch number
             print(f"Epoch {epoch}/{epochs}")
+
+            if self.heatmap_training:
+                self._adjust_heatmap_radius(epoch)
 
             # calculate losses with a progress bar inside the training loop
             train_losses = self._train_one_epoch(train_loader, epoch=epoch, total_epochs=epochs)

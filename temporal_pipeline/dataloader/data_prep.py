@@ -152,6 +152,7 @@ class RandomClipDatasetForActivationMethod(Dataset):
         smooth_annotations=False,
         smooth_window=3,
         activation_radius=100,
+        peak_value=100.0,
         normalize_activation_maps=False,
     ):
         
@@ -161,6 +162,7 @@ class RandomClipDatasetForActivationMethod(Dataset):
         self.smooth_annotations = smooth_annotations
         self.smooth_window = smooth_window
         self.activation_radius = activation_radius
+        self.peak_value = float(peak_value)
         self.normalize_activation_maps = normalize_activation_maps
 
         # initialize the paths of the video files
@@ -211,6 +213,12 @@ class RandomClipDatasetForActivationMethod(Dataset):
         
         return smoothed
 
+    def set_activation_radius(self, radius):
+        self.activation_radius = int(radius)
+
+    def set_peak_value(self, peak_value):
+        self.peak_value = float(peak_value)
+
     def _annotations_to_activation_maps(self, annotations, image_size, radius):
         """Create per-landmark EDT-style activation maps from point annotations.
 
@@ -237,8 +245,8 @@ class RandomClipDatasetForActivationMethod(Dataset):
         dist = torch.sqrt((x_coords - kp_x) ** 2 + (y_coords - kp_y) ** 2)
         activation_maps = torch.clamp(radius - dist, min=0.0)
 
-        if self.normalize_activation_maps:
-            activation_maps = activation_maps / float(radius)
+        # Scale so the center is always the peak value.
+        activation_maps = activation_maps * (float(self.peak_value) / float(max(radius, 1)))
 
         # Output shape: [num_keypoints, T, H, W]
         return activation_maps.permute(3, 2, 0, 1).contiguous()
@@ -319,11 +327,13 @@ class ValidationDataset(Dataset):
         clip_length=64, 
         return_heatmaps=False, 
         activation_radius=5,
+        peak_value=100.0,
         normalize_activation_maps=True,
         ):
         self.clip_length = clip_length
         self.return_heatmaps = return_heatmaps
         self.activation_radius = activation_radius
+        self.peak_value = float(peak_value)
         self.normalize_activation_maps=normalize_activation_maps
 
         # list of paths of the files
@@ -351,6 +361,12 @@ class ValidationDataset(Dataset):
                 start = j * self.clip_length
                 self.clip_indices.append((vid_idx, start))
     
+    def set_activation_radius(self, radius):
+        self.activation_radius = int(radius)
+
+    def set_peak_value(self, peak_value):
+        self.peak_value = float(peak_value)
+    
     def _annotations_to_activation_maps(self, annotations, image_size, radius):
         """Create per-landmark EDT-style activation maps from point annotations.
 
@@ -377,8 +393,8 @@ class ValidationDataset(Dataset):
         dist = torch.sqrt((x_coords - kp_x) ** 2 + (y_coords - kp_y) ** 2)
         activation_maps = torch.clamp(radius - dist, min=0.0)
 
-        if self.normalize_activation_maps:
-            activation_maps = activation_maps / float(radius)
+        # Scale so the center is always the peak value.
+        activation_maps = activation_maps * (float(self.peak_value) / float(max(radius, 1)))
 
         # Output shape: [num_keypoints, T, H, W]
         return activation_maps.permute(3, 2, 0, 1).contiguous()

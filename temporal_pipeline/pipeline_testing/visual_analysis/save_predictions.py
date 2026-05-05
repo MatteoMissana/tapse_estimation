@@ -28,10 +28,10 @@ test_dataset = ValidationDataset(test_path, clip_length=args.window_len, return_
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 #path to the modelweights
-model_checkpoint = "/Users/mmissana/Desktop/best_model_heatmap_method_5_mag/best.pt"
+model_checkpoint = "/Users/mmissana/Desktop/other_model_5_mag/best.pt"
 
 # path where to save the predictions
-img_path = "/Users/mmissana/Desktop/best_model_heatmap_method_5_mag/"
+img_path = "/Users/mmissana/Desktop/other_model_5_mag"
 
 #set the tdevice: cuda then mps then cpu
 device = torch.device("cuda" if torch.cuda.is_available() 

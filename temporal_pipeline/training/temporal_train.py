@@ -22,6 +22,11 @@ def parse_args():
     parser.add_argument('--dataset_path', type=str, default='data/final_reviewed_dataset_for_3d/', help='Path of the dataset, divided into /train/, /val/ and /test/')
     parser.add_argument('--epochs', type=int, default=300, help='Number of training epochs')
     parser.add_argument('--heatmap_training', action='store_true', help='Train the model to output a heatmap centered on the landmark')
+    parser.add_argument('--heatmap_initial_radius', type=int, default=100, help='Initial radius for heatmap targets')
+    parser.add_argument('--heatmap_radius_step', type=int, default=5, help='Amount to reduce the heatmap radius every step')
+    parser.add_argument('--heatmap_radius_step_epochs', type=int, default=20, help='Epoch interval between heatmap radius reductions')
+    parser.add_argument('--heatmap_radius_min', type=int, default=5, help='Minimum heatmap radius for curriculum training')
+    parser.add_argument('--heatmap_peak_value', type=float, default=100.0, help='Peak value at the heatmap center')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--loss', type=str, default='ordered_distance', help='')
@@ -91,9 +96,22 @@ def main():
         # (based on nnLandmark: A Self-Configuring Method for 3D Medical Lanmark Detection)
         # for the validation I prefer using a normal euclidean distance loss of the predicted points from
         # the ground truth
-        train_dataset = RandomClipDatasetForActivationMethod(train_path, clip_length=args.window_len, transform=args.augm_version, 
-                                        smooth_annotations=args.smooth_annotations, smooth_window=args.smooth_window)
-        val_dataset = ValidationDataset(val_path, clip_length=args.window_len, return_heatmaps=False)
+        train_dataset = RandomClipDatasetForActivationMethod(
+            train_path,
+            clip_length=args.window_len,
+            transform=args.augm_version,
+            smooth_annotations=args.smooth_annotations,
+            smooth_window=args.smooth_window,
+            activation_radius=args.heatmap_initial_radius,
+            peak_value=args.heatmap_peak_value,
+        )
+        val_dataset = ValidationDataset(
+            val_path,
+            clip_length=args.window_len,
+            return_heatmaps=False,
+            activation_radius=args.heatmap_initial_radius,
+            peak_value=args.heatmap_peak_value,
+        )
 
         train_loss = torch.nn.MSELoss(reduction='mean')
         val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
@@ -142,7 +160,13 @@ def main():
         checkpoint_dir=save_model_path,
         model_type=args.model,
         wandb=args.wandb,
-        heatmap_training = args.heatmap_training,
+        heatmap_training=args.heatmap_training,
+        train_dataset=train_dataset,
+        val_dataset=val_dataset,
+        heatmap_initial_radius=args.heatmap_initial_radius,
+        heatmap_radius_step=args.heatmap_radius_step,
+        heatmap_radius_step_epochs=args.heatmap_radius_step_epochs,
+        heatmap_radius_min=args.heatmap_radius_min,
     )
 
     history = trainer.fit(
