@@ -2,7 +2,6 @@ import torch
 from torch.utils.data import DataLoader
 import argparse
 
-from monai.networks.nets import UNet
 from temporal_pipeline.utils.plot import save_image
 from temporal_pipeline.dataloader.data_prep import ValidationDataset
 from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d, argmax_3d

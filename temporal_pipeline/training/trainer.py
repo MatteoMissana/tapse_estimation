@@ -210,11 +210,11 @@ class Trainer:
 
                 pbar.set_postfix(loss=loss.item(), refresh=True)
 
-            mask = masks[0, 0, 0].detach().cpu().numpy()
-            visualize_image(mask)
+            # mask = masks[0, 0, 0].detach().cpu().numpy()
+            # visualize_image(mask)
 
-            mask = outputs[0, 0, 0].detach().cpu().numpy()
-            visualize_image(mask)
+            # mask = outputs[0, 0, 0].detach().cpu().numpy()
+            # visualize_image(mask)
 
         # calculate avg decomposed loss
         avg_loss = running_loss / len(loader)
