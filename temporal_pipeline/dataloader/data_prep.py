@@ -433,6 +433,121 @@ class ValidationDataset(Dataset):
 
         return clip_acq, clip_ann
 
+
+class SingleFileClipDataset(Dataset):
+    '''
+    Dataset for testing/inference on a single file.
+    Returns all possible non-overlapping clips of length clip_length from the video,
+    starting from a specified frame.
+    
+    file_path: path to a single hdf5 file with acquisitions and annotations
+    clip_length: length of the clips to feed to the model
+    start_frame: frame index to start from (default 0)
+    return_heatmaps: if True, convert annotations to EDT heatmaps
+    activation_radius: radius for heatmaps
+    peak_value: peak value for heatmaps
+    normalize_activation_maps: whether to normalize heatmaps
+    '''
+    def __init__(
+        self,
+        file_path,
+        clip_length=32,
+        start_frame=0,
+        return_heatmaps=False,
+        activation_radius=5,
+        peak_value=100.0,
+        normalize_activation_maps=True,
+    ):
+        self.file_path = file_path
+        self.clip_length = clip_length
+        self.start_frame = int(start_frame)
+        self.return_heatmaps = return_heatmaps
+        self.activation_radius = activation_radius
+        self.peak_value = float(peak_value)
+        self.normalize_activation_maps = normalize_activation_maps
+
+        # Get total number of frames
+        with h5py.File(file_path, 'r') as h5_file:
+            self.total_frames = h5_file['annotations'].shape[0]
+
+        # Calculate number of clips from start_frame to end
+        available_frames = self.total_frames - self.start_frame
+        self.n_clips = available_frames // self.clip_length
+
+    def set_activation_radius(self, radius):
+        self.activation_radius = int(radius)
+
+    def set_peak_value(self, peak_value):
+        self.peak_value = float(peak_value)
+    
+    def _annotations_to_activation_maps(self, annotations, image_size, radius):
+        """Create per-landmark EDT-style activation maps from point annotations.
+
+        annotations: [T, num_keypoints, 2]
+        image_size: tuple (H, W)
+        radius: maximum radius in pixels
+
+        Returns: [num_keypoints, T, H, W]
+        """
+        T, num_keypoints, _ = annotations.shape
+        H, W = image_size
+        device = annotations.device
+        dtype = annotations.dtype
+
+        # Create a broadcastable coordinate grid [H, W, 1, 1]
+        y_coords = torch.arange(H, device=device, dtype=dtype).view(H, 1, 1, 1)
+        x_coords = torch.arange(W, device=device, dtype=dtype).view(1, W, 1, 1)
+
+        # Keypoint coordinates: [T, num_keypoints]
+        kp_x = annotations[..., 0].reshape(1, 1, T, num_keypoints)
+        kp_y = annotations[..., 1].reshape(1, 1, T, num_keypoints)
+
+        dist = torch.sqrt((x_coords - kp_x) ** 2 + (y_coords - kp_y) ** 2)
+        activation_maps = torch.clamp(radius - dist, min=0.0)
+
+        # Scale so the center is always the peak value.
+        activation_maps = activation_maps * (float(self.peak_value) / float(max(radius, 1)))
+
+        # Output shape: [num_keypoints, T, H, W]
+        return activation_maps.permute(3, 2, 0, 1).contiguous()
+
+    def __len__(self):
+        return self.n_clips
+
+    def __getitem__(self, idx):
+        # Calculate the actual frame range for this clip
+        clip_start = self.start_frame + idx * self.clip_length
+        clip_end = clip_start + self.clip_length
+
+        with h5py.File(self.file_path, 'r') as h5_file:
+            clip_acq = h5_file['frames'][:, :, clip_start:clip_end]
+            clip_ann = h5_file['annotations'][clip_start:clip_end]
+
+        # convert to tensors and permute to (N, H, W)
+        clip_acq = torch.from_numpy(clip_acq).float()
+        clip_ann = torch.from_numpy(clip_ann).float()
+        clip_acq = clip_acq.permute(2, 0, 1)
+
+        # Normalize to [0, 1]
+        clip_acq = clip_acq - clip_acq.min()
+        clip_acq = clip_acq / (clip_acq.max() + 1e-7)
+
+        # pad or trim images
+        clip_acq, clip_ann = resize_or_crop_image_torch(clip_acq, clip_ann)
+
+        if self.return_heatmaps:
+            clip_ann = self._annotations_to_activation_maps(
+                clip_ann,
+                image_size=clip_acq.shape[1:],
+                radius=self.activation_radius,
+            )
+
+        # unsqueeze to pass it through the model
+        clip_acq = clip_acq.unsqueeze(0)
+
+        return clip_acq, clip_ann
+
+
 if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() 
     else "mps" if torch.backends.mps.is_available() else "cpu")

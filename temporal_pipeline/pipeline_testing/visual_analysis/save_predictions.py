@@ -8,6 +8,7 @@ from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import 
 from temporal_pipeline.utils.plot import visualize_image
 from temporal_pipeline.models.models import UNet3D
 
+
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='test the trained model and save the images with predictions')
@@ -27,10 +28,10 @@ test_dataset = ValidationDataset(test_path, clip_length=args.window_len, return_
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 #path to the modelweights
-model_checkpoint = "/Users/mmissana/Desktop/other_model_5_mag/best.pt"
+model_checkpoint = "/Users/mmissana/Desktop/Best_model_Unet_6_mag/best.pt"
 
 # path where to save the predictions
-img_path = "/Users/mmissana/Desktop/other_model_5_mag"
+img_path = "/Users/mmissana/Desktop/Best_model_Unet_6_mag"
 
 #set the tdevice: cuda then mps then cpu
 device = torch.device("cuda" if torch.cuda.is_available() 
@@ -52,9 +53,6 @@ for images, masks in test_loader:
     images, masks = images.to(device), masks.to(device)
 
     outputs = model(images)
-
-    mask = outputs[0, 0, 0].detach().cpu().numpy()
-    visualize_image(mask)
 
 
     if args.heatmap_method:
