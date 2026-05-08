@@ -6,7 +6,7 @@ import h5py
 import numpy as np
 from temporal_pipeline.augmentations.augm_3d import apply_transform
 from temporal_pipeline.utils.plot import visualize_image, VolumeViewer
-from temporal_pipeline.dataloader.preprocessing import resize_or_crop_image_torch
+from temporal_pipeline.dataloader.preprocessing import resize_or_crop_image_torch, apply_lut
 
 
 class RandomClipDataset(Dataset):
@@ -457,6 +457,7 @@ class SingleFileClipDataset(Dataset):
         activation_radius=5,
         peak_value=100.0,
         normalize_activation_maps=True,
+        load_from_annotations = False, # use this when you need to compare the annotations to the predictions. Otherwise the images are loaded as new, and you loose the origin of the coordinates
     ):
         self.file_path = file_path
         self.clip_length = clip_length
@@ -465,6 +466,7 @@ class SingleFileClipDataset(Dataset):
         self.activation_radius = activation_radius
         self.peak_value = float(peak_value)
         self.normalize_activation_maps = normalize_activation_maps
+        self.load_from_annotations = load_from_annotations
 
         # Get total number of frames
         with h5py.File(file_path, 'r') as h5_file:
@@ -520,13 +522,21 @@ class SingleFileClipDataset(Dataset):
         clip_end = clip_start + self.clip_length
 
         with h5py.File(self.file_path, 'r') as h5_file:
-            clip_acq = h5_file['frames'][:, :, clip_start:clip_end]
+            if self.load_from_annotations:
+                clip_acq = h5_file['frames'][:, :, clip_start:clip_end]
+            else:
+                clip_acq = h5_file['tissue']['data'][:, :, clip_start:clip_end]
+                # preprocessing that I also did when annotating and saving the images for the training set
+                clip_acq = clip_acq.transpose(2,1,0)[:, :, ::-1]
+                clip_acq = apply_lut(clip_acq)
             clip_ann = h5_file['annotations'][clip_start:clip_end]
 
         # convert to tensors and permute to (N, H, W)
         clip_acq = torch.from_numpy(clip_acq).float()
         clip_ann = torch.from_numpy(clip_ann).float()
-        clip_acq = clip_acq.permute(2, 0, 1)
+
+        if self.load_from_annotations:
+            clip_acq = clip_acq.permute(2, 0, 1)
 
         # Normalize to [0, 1]
         clip_acq = clip_acq - clip_acq.min()

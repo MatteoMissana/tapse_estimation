@@ -12,8 +12,8 @@ from scipy import interpolate
 
 from temporal_pipeline.dataloader.data_prep import SingleFileClipDataset
 from temporal_pipeline.models.models import UNet3D
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import argmax_3d
-
+from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import argmax_3d, argmax_3d_for_testing
+from temporal_pipeline.utils.plot import visualize_image
 
 class RVCalculator:
     def __init__(self, ed_frame, es_frame, method="triangle"):
@@ -103,6 +103,17 @@ class Predictor:
         self.device = torch.device("cuda" if torch.cuda.is_available()
             else "mps" if torch.backends.mps.is_available() else "cpu")
         print('Using device:', self.device)
+
+        #load the model and weights
+        self.model = UNet3D(
+                    device=self.device,
+                    initial_channels=self.args.unet_initial_channels,
+                    num_res_units=self.args.unet_res_units,
+                )            
+        self.model.load_state_dict(torch.load(self.args.model_checkpoints, 
+        map_location=self.device)['model_state_dict'])
+
+        self.model.eval()
 
     def create_prediction_excel(self):
         ''' this function takes as imput the arguments passed with predict_indices.py, and 
@@ -389,8 +400,6 @@ class Predictor:
         self.df.loc[row_idx, 'rvlsfmid'] = mean_indices[16]
 
 
-
-
     def predict(self):
         '''
         # TODO
@@ -402,17 +411,6 @@ class Predictor:
 
         # extract the file paths
         paths = self.df["path"].dropna().tolist()
-
-        #load the model and weights
-        self.model = UNet3D(
-                    device=self.device,
-                    initial_channels=self.args.unet_initial_channels,
-                    num_res_units=self.args.unet_res_units,
-                )            
-        self.model.load_state_dict(torch.load(self.args.model_checkpoints, 
-        map_location=self.device)['model_state_dict'])
-
-        self.model.eval()
 
         for path in paths:
             # compose file path
@@ -452,6 +450,61 @@ class Predictor:
 
         #save dataframe in excel
         self.df.to_excel(self.args.excel_path, index=False)
+
+    def compute_coordinates_annotations(self, file_path):
+        '''predicts the coordinates of the landmarks in the 
+        specified hdf5 file, and returns them together with the manual annotations.
+        Very useful for testing'''
+        # load the file in 3d images of 32 frames 
+        test_dataset = SingleFileClipDataset(
+            file_path, 
+            clip_length=self.args.window_len, 
+            return_heatmaps=False,
+            load_from_annotations = True,
+            )
+
+        test_loader = DataLoader(
+            test_dataset, 
+            batch_size=1, 
+            shuffle=False
+            )
+
+        coordinates_list=[]
+        maxima_list = []
+        gt_list = []
+
+        for images, masks in test_loader:
+            # inference
+            images, masks = images.to(self.device), masks.to(self.device)
+            outputs = self.model(images)
+
+            if self.args.heatmap_method:
+                # extract the maximum activated pixel from the heatmaps
+                com_tensor, maxima = argmax_3d_for_testing(outputs, device=self.device)
+                # print(com_tensor.shape)
+
+                # # Extract the first slice of the first image in the batch
+                # img_slice = images[0, 0, 0].cpu().numpy()
+
+                # # Extract (x, y) coordinates for all landmarks
+                # pts = com_tensor[0, 0, :].cpu().numpy() 
+
+                # visualize_image(img_slice, points=pts)
+
+                coordinates_list.append(com_tensor)
+                maxima_list.append(maxima.permute(0,2,1))
+                gt_list.append(masks)
+
+        
+        # Stack along dimension 1
+        self.coordinates_array = torch.cat(coordinates_list, dim=1)
+        self.maxima_array = torch.cat(maxima_list, dim=1)
+        self.gt_array = torch.cat(gt_list, dim=1)
+
+
+
+
+
 
 
 

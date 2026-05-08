@@ -56,97 +56,10 @@ def resize_or_crop_image(img, keypoints, target_size=(256, 256)):
     print(img.shape, keypoints.shape)
     return img, keypoints
 
-def create_numpy_dataset(folder=r'D:\mmissana\data\best_slices', save_path=r'D:\mmissana\data\dataset_separated_by_video_256'):
-    keypoints_np = {}
-    images_np = {}
-    
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
-    
-    for patient in os.listdir(folder):
-        if patient == 'readme.txt':
-            continue
-        
-        image_list = []
-        keypoint_list = []
-        patient_folder = os.path.join(folder, patient)
-        
-        for doc in os.listdir(patient_folder):
-            if doc == 'video_best_slice_annotations.npz':
-                file_path = os.path.join(patient_folder, doc)
-                file = np.load(file_path)
-                
-                images = file['frames'].transpose(2, 0, 1)  # (H, W, frames) → (frames, H, W)
-                keypoints = file['annotations']
-                
-                print(patient, 'number of images:', len(images))
-                
-                for i in range(len(images)):
-                    image_processed, keypoints_processed = resize_or_crop_image(
-                        torch.tensor(images[i], dtype=torch.float32), 
-                        torch.tensor(keypoints[i], dtype=torch.float32)
-                    )
-                    image_list.append(image_processed.numpy())
-                    keypoint_list.append(keypoints_processed.numpy())
-                
-                keypoints_np[patient] = np.array(keypoint_list)
-                images_np[patient] = np.array(image_list)
-                
-                patient_save_path = os.path.join(save_path, f"{patient}.npz")
-                np.savez_compressed(patient_save_path, images=images_np[patient], keypoints=keypoints_np[patient])
-                
-    print("Dataset creation complete.")
 
-def preprocess_images(images_array, model_type="EchoCoder", device='cpu'):
-    """
-    images_array: NumPy array con shape (N, 256, 256), valori tra 0-255 o normalizzati 0-1
-    model_type: Specifica il modello per la corretta formattazione dell'input
-    """
-
-    # Assicuriamoci che il tipo di dato sia float32 e normalizziamo se necessario
-    if images_array.max() > 1:
-        images_array = images_array.astype(np.float32)/255.0
-
-    # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
-    images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
-
-    # Modifichiamo il formato in base al modello
-    if model_type == "EchoCoder":
-        images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
-    elif model_type == "EchoCoder Old":
-        images_tensor = images_tensor.unsqueeze(1)  # Shape diventa (N, 1, 1, 256, 256)
-    elif model_type == "EchoCoder 2D+t":
-        images_tensor = images_tensor.repeat(1, 64, 1, 1)  # Shape diventa (N, 64, 256, 256)
-    elif model_type == "U-Net":
-        images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
-
-    return images_tensor
-
-# def preprocess_images_with_augmentations(images_array, model_type="EchoCoder", device='cpu'):
-#     """
-#     images_array: NumPy array con shape (N, 256, 256), valori tra 0-255 o normalizzati 0-1
-#     model_type: Specifica il modello per la corretta formattazione dell'input
-#     """
-
-#     # Assicuriamoci che il tipo di dato sia float32 e normalizziamo se necessario
-#     if images_array.max() > 1:
-#         images_array = images_array.astype(np.float32)/255.0
-
-#     # Aggiungiamo le dimensioni richieste per PyTorch: (N, 1, 256, 256)
-#     images_tensor = torch.tensor(images_array).unsqueeze(1).to(device)  # Shape diventa (N, 1, 256, 256)
-
-#     # Modifichiamo il formato in base al modello
-#     if model_type == "EchoCoder":
-#         images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
-#     elif model_type == "EchoCoder Old":
-#         images_tensor = images_tensor.unsqueeze(1)  # Shape diventa (N, 1, 1, 256, 256)
-#     elif model_type == "EchoCoder 2D+t":
-#         images_tensor = images_tensor.repeat(1, 64, 1, 1)  # Shape diventa (N, 64, 256, 256)
-#     elif model_type == "U-Net":
-#         images_tensor = images_tensor.repeat(1, 3, 1, 1)  # Shape diventa (N, 3, 256, 256)
-
-#     return images_tensor
-
+"""
+Imported from https://github.com/mailys-hau/echovox
+"""
 
 """
 Imported from https://github.com/mailys-hau/echovox
@@ -248,6 +161,7 @@ def apply_lut(array):
     array = np.take(LUT, array)
 
     return array
+
 
 
 def resize_or_crop_image_np(imgs, keypoints, target_size=(256, 256)):
