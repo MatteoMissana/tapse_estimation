@@ -363,8 +363,6 @@ def argmax_3d_for_testing(tensor: torch.Tensor, device='cpu', normalize=False, #
         conf_mask:     (only when thresh_method=True) Bool tensor of shape [N, C, B],
                        True where the heatmap max >= threshold.
     """
-    if thresh_method and threshold is None:
-        raise ValueError("threshold must be provided when thresh_method=True")
 
     # Normalize rank
     if tensor.ndim == 4:

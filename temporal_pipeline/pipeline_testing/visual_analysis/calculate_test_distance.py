@@ -28,6 +28,7 @@ def parse_args():
     parser.add_argument("--window_len", type=int, default=32, help="Number of frames the model receives in input.")
     parser.add_argument("--output_dir", type=str, default="data/boxplots", help="Directory where plots and stats will be saved.")
     parser.add_argument("--thresh_method", action="store_true", help="Enable confidence threshold analysis.")
+    parser.add_argument("--thresh", type=str, default=None, help="if passed without --thresh_method, it produces the boxplots at that threshold of confidence")
     return parser.parse_args()
 
 
@@ -328,42 +329,91 @@ def main():
     print(f"\nStatistics saved to: {stats_path}")
 
     # ------------------------------------------------------------------
-    # 5. Box plots
+    # 5. Box plots  (unfiltered, and optionally at fixed threshold)
     # ------------------------------------------------------------------
+    def generate_boxplots(bp_errors, bp_per_landmark, bp_per_patient,
+                          bp_per_patient_per_landmark, out_dir, title_suffix=""):
+        """Generates the full set of 4 box plots into out_dir."""
+        os.makedirs(out_dir, exist_ok=True)
+
+        boxplot_panel({"All videos": bp_errors},
+                      title=f"Overall Euclidean Error{title_suffix}",
+                      ylabel="Euclidean error (mm)",
+                      output_path=os.path.join(out_dir, "boxplot_overall.png"))
+
+        boxplot_panel(bp_per_landmark,
+                      title=f"Error per Landmark{title_suffix}",
+                      ylabel="Euclidean error (mm)",
+                      output_path=os.path.join(out_dir, "boxplot_per_landmark.png"))
+
+        boxplot_panel(bp_per_patient,
+                      title=f"Error per Patient{title_suffix}",
+                      ylabel="Euclidean error (mm)",
+                      output_path=os.path.join(out_dir, "boxplot_per_patient.png"))
+
+        fig, axes = plt.subplots(1, n_landmarks, figsize=(5 * n_landmarks, 5), sharey=True)
+        patient_ids = sorted(bp_per_patient_per_landmark.keys())
+        for lm, ax in enumerate(axes):
+            data = [np.array(bp_per_patient_per_landmark[pid][lm]) for pid in patient_ids]
+            bp = ax.boxplot(data, patch_artist=True,
+                            medianprops=dict(color="black", linewidth=2))
+            colors = plt.cm.Set2(np.linspace(0, 1, len(patient_ids)))
+            for patch, color in zip(bp["boxes"], colors):
+                patch.set_facecolor(color)
+            ax.set_xticks(range(1, len(patient_ids) + 1))
+            ax.set_xticklabels(patient_ids, rotation=35, ha="right", fontsize=8)
+            ax.set_title(LANDMARK_NAMES[lm])
+            ax.grid(axis="y", linestyle="--", alpha=0.5)
+            if lm == 0:
+                ax.set_ylabel("Euclidean error (mm)")
+        fig.suptitle(f"Error per Patient × Landmark{title_suffix}", fontsize=13, y=1.02)
+        plt.tight_layout()
+        p = os.path.join(out_dir, "boxplot_patient_x_landmark.png")
+        plt.savefig(p, dpi=150, bbox_inches="tight"); plt.close(fig)
+        print(f"  → Saved: {p}")
+
     print("\nGenerating box plots…")
+    generate_boxplots(all_errors, per_landmark_errors, per_patient_errors,
+                      per_patient_per_landmark, args.output_dir)
 
-    boxplot_panel({"All videos": all_errors},
-                  title="Overall Euclidean Error", ylabel="Euclidean error (px)",
-                  output_path=os.path.join(args.output_dir, "boxplot_overall.png"))
+    # --- Fixed-threshold box plots ---
+    if args.thresh is not None:
+        t = float(args.thresh)
+        print(f"\nGenerating box plots at threshold={t}…")
 
-    boxplot_panel(per_landmark_errors,
-                  title="Error per Landmark", ylabel="Euclidean error (px)",
-                  output_path=os.path.join(args.output_dir, "boxplot_per_landmark.png"))
+        thresh_per_patient_per_lm = defaultdict(lambda: defaultdict(list))
+        for pid in per_patient_per_landmark:
+            for lm in range(n_landmarks):
+                errs = np.array(per_patient_per_landmark[pid][lm])
+                maxv = np.array(maxima_per_patient_per_landmark[pid][lm])
+                thresh_per_patient_per_lm[pid][lm] = errs[maxv >= t].tolist()
 
-    boxplot_panel(per_patient_errors,
-                  title="Error per Patient", ylabel="Euclidean error (px)",
-                  output_path=os.path.join(args.output_dir, "boxplot_per_patient.png"))
+        thresh_all_errors = np.concatenate([
+            np.array(thresh_per_patient_per_lm[pid][lm])
+            for pid in thresh_per_patient_per_lm
+            for lm in range(n_landmarks)
+        ])
+        thresh_per_landmark = {
+            LANDMARK_NAMES[lm]: np.concatenate([
+                np.array(thresh_per_patient_per_lm[pid][lm])
+                for pid in thresh_per_patient_per_lm
+            ]) for lm in range(n_landmarks)
+        }
+        thresh_per_patient = {
+            pid: np.concatenate([
+                np.array(thresh_per_patient_per_lm[pid][lm])
+                for lm in range(n_landmarks)
+            ]) for pid in sorted(thresh_per_patient_per_lm)
+        }
 
-    fig, axes = plt.subplots(1, n_landmarks, figsize=(5 * n_landmarks, 5), sharey=True)
-    patient_ids = sorted(per_patient_per_landmark.keys())
-    for lm, ax in enumerate(axes):
-        data = [np.array(per_patient_per_landmark[pid][lm]) for pid in patient_ids]
-        bp = ax.boxplot(data, patch_artist=True,
-                        medianprops=dict(color="black", linewidth=2))
-        colors = plt.cm.Set2(np.linspace(0, 1, len(patient_ids)))
-        for patch, color in zip(bp["boxes"], colors):
-            patch.set_facecolor(color)
-        ax.set_xticks(range(1, len(patient_ids) + 1))
-        ax.set_xticklabels(patient_ids, rotation=35, ha="right", fontsize=8)
-        ax.set_title(LANDMARK_NAMES[lm])
-        ax.grid(axis="y", linestyle="--", alpha=0.5)
-        if lm == 0:
-            ax.set_ylabel("Euclidean error (px)")
-    fig.suptitle("Error per Patient × Landmark", fontsize=13, y=1.02)
-    plt.tight_layout()
-    p = os.path.join(args.output_dir, "boxplot_patient_x_landmark.png")
-    plt.savefig(p, dpi=150, bbox_inches="tight"); plt.close(fig)
-    print(f"  → Saved: {p}")
+        n_after = len(thresh_all_errors)
+        print(f"  Points retained: {n_after} / {n_total}  "
+              f"({100.0 * (n_total - n_after) / n_total:.1f}% discarded)")
+
+        thresh_dir = os.path.join(args.output_dir, f"thresh_{args.thresh}")
+        generate_boxplots(thresh_all_errors, thresh_per_landmark, thresh_per_patient,
+                          thresh_per_patient_per_lm, thresh_dir,
+                          title_suffix=f" (threshold={t})")
 
     # ------------------------------------------------------------------
     # 6. Threshold-specific analyses (--thresh_method only)
