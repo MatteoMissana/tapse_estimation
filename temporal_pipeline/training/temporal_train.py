@@ -10,7 +10,8 @@ import h5py
 # TODO:maybe u have to set numpy seed if a run differs from the same one
 from temporal_pipeline.dataloader.data_prep import RandomClipDataset, ValidationDataset, RandomClipDatasetForActivationMethod
 from temporal_pipeline.models.models import UNet3D, EncoderDecoder_3d
-from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss, HeatmapBCETopKLoss
+from temporal_pipeline.losses.distances import CombinedLossPenalty, CombinedLandmarkLoss
+from temporal_pipeline.losses.heatmap_losses import HeatmapMotionLoss, HeatmapBCETopKLoss
 from temporal_pipeline.training.trainer import Trainer
 from temporal_pipeline.utils.save import get_experiment_path
 
@@ -29,7 +30,6 @@ def parse_args():
     parser.add_argument('--heatmap_peak_value', type=float, default=100.0, help='Peak value at the heatmap center')
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
-    parser.add_argument('--loss', type=str, default='ordered_distance', help='')
     parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
     parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
     parser.add_argument('--reduce_factor', type=float, default=0.3, help='Factor by which the learning rate will be reduced by ReduceLROnPlateau. new_lr = lr * factor')
@@ -71,7 +71,7 @@ def main():
         wandb.init(
             project=args.wandb_project,
             entity=args.wandb_entity,
-            name=f"{args.model}_{args.loss}_augm_{args.augm_version}",
+            name=f"{args.model}_augm_{args.augm_version}",
             config={
                 "epochs": args.epochs,
                 "batch_size": args.batch_size,
@@ -80,7 +80,6 @@ def main():
                 "reduce on plateau patience": args.lr_patience,
                 "model": args.model,
                 "augmentation_version": args.augm_version,
-                "loss_type": args.loss,
                 "seed": args.seed,
                 "smooth_annotations": args.smooth_annotations,
                 "smooth_window": args.smooth_window,
@@ -113,7 +112,7 @@ def main():
             peak_value=args.heatmap_peak_value,
         )
 
-        train_loss = torch.nn.MSELoss(reduction='mean')
+        train_loss = HeatmapMotionLoss()
         val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
     else:
         # else the dataset needs to output just the point coordinates, and the loss is distance-based

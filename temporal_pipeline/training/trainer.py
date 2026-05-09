@@ -192,9 +192,9 @@ class Trainer:
                     # Compute the loss
                     loss, loss_breakdown = self.train_loss_fn(com_tensor, masks)
                 elif self.heatmap_training:
-                    # For heatmap training, use BCE TopK loss directly on outputs
-                    loss = self.train_loss_fn(outputs, masks)
-                    loss_breakdown = {'dist': -1000, 'motion': -1000}  # dummy breakdown
+                    # For heatmap training, use mean squared error plus distance error loss
+                    loss, loss_breakdown = self.train_loss_fn(outputs, masks)
+                    print(loss_breakdown)
                 else:
                     raise Exception("you found a bug? This should never happen, signal it to the developers please")# this should never happen
                     
@@ -205,8 +205,9 @@ class Trainer:
                 running_loss += loss.item()
 
                 # save total decomposed loss so as to log it into wandb
-                train_dist += loss_breakdown['dist']
-                train_motion += loss_breakdown['motion']
+                if not self.heatmap_training:
+                    train_dist += loss_breakdown['dist']
+                    train_motion += loss_breakdown['motion']
 
                 pbar.set_postfix(loss=loss.item(), refresh=True)
 
