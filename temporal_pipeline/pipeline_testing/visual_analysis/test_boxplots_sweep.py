@@ -245,11 +245,11 @@ def main():
         with h5py.File(file_path, 'r') as f:
             pixelsize = f['tissue']['pixelsize'][()]
 
-        predictor.compute_coordinates_annotations(file_path)
+        pred, maxima, gt = predictor.compute_coordinates_annotations(file_path)
 
-        pred   = to_numpy(predictor.coordinates_array)          # (1, N, 3, 2)
-        gt     = to_numpy(predictor.gt_array)                # (1, N, 3, 2)
-        maxima = to_numpy(predictor.maxima_array).squeeze(0)  # (N, 3)
+        pred   = to_numpy(pred)          # (1, N, 3, 2)
+        gt     = to_numpy(gt)                # (1, N, 3, 2)
+        maxima = to_numpy(maxima).squeeze(0)  # (N, 3)
 
         pred[:, :, :, 0] *= pixelsize[0] * 1000
         pred[:, :, :, 1] *= pixelsize[1] * 1000

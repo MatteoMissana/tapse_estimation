@@ -12,10 +12,35 @@ from scipy import interpolate
 
 from temporal_pipeline.dataloader.data_prep import SingleFileClipDataset
 from temporal_pipeline.models.models import UNet3D
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import argmax_3d, argmax_3d_for_testing
+from temporal_pipeline.postprocessing.coordinates_from_heatmaps import argmax_3d
 from temporal_pipeline.utils.plot import visualize_image
 
 class RVCalculator:
+    """Compute RV geometry indices from predicted ED/ES landmarks.
+
+    If any landmark needed for a given index is NaN, that index is left as NaN.
+    """
+
+    INDEX_NAMES = [
+        "tapse_fw",
+        "tapse_sep",
+        "rvfac",
+        "ed_area",
+        "es_area",
+        "ed_len_fw",
+        "ed_len_sep",
+        "es_len_fw",
+        "es_len_sep",
+        "ed_diam",
+        "es_diam",
+        "ed_len_mid",
+        "es_len_mid",
+        "strain_fw",
+        "strain_global",
+        "strain_sep",
+        "strain_mid",
+    ]
+
     def __init__(self, ed_frame, es_frame, method="triangle"):
         self.ed_free_wall = torch.as_tensor(ed_frame[0])
         self.ed_septum = torch.as_tensor(ed_frame[1])
@@ -28,62 +53,92 @@ class RVCalculator:
         self.method = method
         self._compute()
 
+    @staticmethod
+    def _has_nan(*tensors):
+        return any(torch.isnan(t).any() for t in tensors)
+
+    @staticmethod
+    def _safe_norm(a, b, dim=-1):
+        if RVCalculator._has_nan(a, b):
+            return torch.tensor(float("nan"), device=a.device)
+        return torch.linalg.norm(a - b, dim=dim)
+
+    @staticmethod
+    def _safe_percent_change(base, compare):
+        if torch.isnan(base) or torch.isnan(compare) or base == 0:
+            return torch.tensor(float("nan"), device=base.device)
+        return (base - compare) / base * 100
+
     def _compute(self):
         ed_mid = (self.ed_free_wall + self.ed_septum) / 2
         es_mid = (self.es_free_wall + self.es_septum) / 2
 
-        self.tapse_fw = torch.linalg.norm(self.ed_free_wall - self.es_free_wall)
-        self.tapse_sep = torch.linalg.norm(self.ed_septum - self.es_septum)
+        self.tapse_fw = self._safe_norm(self.ed_free_wall, self.es_free_wall)
+        self.tapse_sep = self._safe_norm(self.ed_septum, self.es_septum)
 
-        self.ed_len_fw = torch.linalg.norm(self.ed_free_wall - self.ed_apex, dim=-1)
-        self.ed_len_sep = torch.linalg.norm(self.ed_septum - self.ed_apex, dim=-1)
-        self.ed_len_mid = torch.linalg.norm(ed_mid - self.ed_apex, dim=-1)
+        self.ed_len_fw = self._safe_norm(self.ed_free_wall, self.ed_apex)
+        self.ed_len_sep = self._safe_norm(self.ed_septum, self.ed_apex)
+        self.ed_len_mid = self._safe_norm(ed_mid, self.ed_apex)
 
-        self.es_len_fw = torch.linalg.norm(self.es_free_wall - self.es_apex, dim=-1)
-        self.es_len_sep = torch.linalg.norm(self.es_septum - self.es_apex, dim=-1)
-        self.es_len_mid = torch.linalg.norm(es_mid - self.es_apex, dim=-1)
+        self.es_len_fw = self._safe_norm(self.es_free_wall, self.es_apex)
+        self.es_len_sep = self._safe_norm(self.es_septum, self.es_apex)
+        self.es_len_mid = self._safe_norm(es_mid, self.es_apex)
 
-        self.ed_diam = torch.linalg.norm(self.ed_free_wall - self.ed_septum, dim=-1)
-        self.es_diam = torch.linalg.norm(self.es_free_wall - self.es_septum, dim=-1)
+        self.ed_diam = self._safe_norm(self.ed_free_wall, self.ed_septum)
+        self.es_diam = self._safe_norm(self.es_free_wall, self.es_septum)
 
+        self.ed_area = self._compute_area(
+            self.ed_free_wall,
+            self.ed_apex,
+            self.ed_septum,
+            self.ed_len_fw,
+            self.ed_len_sep,
+            self.ed_diam,
+        )
+        self.es_area = self._compute_area(
+            self.es_free_wall,
+            self.es_apex,
+            self.es_septum,
+            self.es_len_fw,
+            self.es_len_sep,
+            self.es_diam,
+        )
+
+        self.rvfac = self._safe_percent_change(self.ed_area, self.es_area)
+
+        self.strain_fw = self._safe_percent_change(self.ed_len_fw, self.es_len_fw)
+        self.strain_sep = self._safe_percent_change(self.ed_len_sep, self.es_len_sep)
+        self.strain_mid = self._safe_percent_change(self.ed_len_mid, self.es_len_mid)
+        self.strain_global = self._safe_percent_change(
+            self.ed_len_fw + self.ed_len_sep,
+            self.es_len_fw + self.es_len_sep,
+        )
+
+    def _compute_area(self, free_wall, apex, septum, len_fw, len_sep, diam):
         if self.method == "triangle":
-            ed_s = (self.ed_len_fw + self.ed_len_sep + self.ed_diam) / 2
-            self.ed_area = torch.sqrt(
-                ed_s
-                * (ed_s - self.ed_len_fw)
-                * (ed_s - self.ed_len_sep)
-                * (ed_s - self.ed_diam)
-            )
-
-            es_s = (self.es_len_fw + self.es_len_sep + self.es_diam) / 2
-            self.es_area = torch.sqrt(
-                es_s
-                * (es_s - self.es_len_fw)
-                * (es_s - self.es_len_sep)
-                * (es_s - self.es_diam)
-            )
-
-        elif self.method == "spline":
-            self.ed_area = self._spline_area(self.ed_free_wall, self.ed_apex, self.ed_septum, n_points=6)
-            self.es_area = self._spline_area(self.es_free_wall, self.es_apex, self.es_septum, n_points= 5)
-
-        else:
-            raise ValueError("method must be 'triangle' or 'spline'")
-
-        self.rvfac = (self.ed_area - self.es_area) / self.ed_area * 100
-
-        self.strain_fw = (self.ed_len_fw - self.es_len_fw) / self.ed_len_fw * 100
-        self.strain_sep = (self.ed_len_sep - self.es_len_sep) / self.ed_len_sep * 100
-        self.strain_mid = (self.ed_len_mid - self.es_len_mid) / self.ed_len_mid * 100
-        self.strain_global = (
-            (self.ed_len_fw + self.ed_len_sep)
-            - (self.es_len_fw + self.es_len_sep)
-        ) / (self.ed_len_fw + self.ed_len_sep) * 100
+            return self._triangle_area(len_fw, len_sep, diam)
+        if self.method == "spline":
+            return self._spline_area(free_wall, apex, septum)
+        raise ValueError("method must be 'triangle' or 'spline'")
 
     @staticmethod
-    def _spline_area(p1, apex, p2, n_points):
+    def _triangle_area(len_fw, len_sep, diam):
+        if torch.isnan(len_fw) or torch.isnan(len_sep) or torch.isnan(diam):
+            return torch.tensor(float("nan"), device=len_fw.device)
+
+        s = (len_fw + len_sep + diam) / 2
+        area = s * (s - len_fw) * (s - len_sep) * (s - diam)
+        if torch.any(area < 0):
+            return torch.tensor(float("nan"), device=len_fw.device)
+        return torch.sqrt(area)
+
+    @staticmethod
+    def _spline_area(p1, apex, p2, n_points=6):
+        if RVCalculator._has_nan(p1, apex, p2):
+            return torch.tensor(float("nan"), device=p1.device)
+
         pts = torch.vstack([p1, apex, p2, p1]).cpu().numpy()
-        tck, u = interpolate.splprep([pts[:, 0], pts[:, 1]], s=0, per=True, k=3)
+        tck, _ = interpolate.splprep([pts[:, 0], pts[:, 1]], s=0, per=True, k=3)
         u_new = np.linspace(0, 1, n_points)
         x_new, y_new = interpolate.splev(u_new, tck)
         poly = torch.from_numpy(np.column_stack((x_new, y_new))).to(dtype=torch.float32, device=p1.device)
@@ -241,6 +296,8 @@ class Predictor:
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
         coordinates_list=[]
+        max_values_list = []
+
         for images, masks in test_loader:
             # inference
             images, masks = images.to(self.device), masks.to(self.device)
@@ -248,12 +305,25 @@ class Predictor:
 
             if self.args.heatmap_method:
                 # extract the maximum activated pixel from the heatmaps
-                com_tensor = argmax_3d(outputs, device=self.device)
-                coordinates_list.append(com_tensor)
-        
+                com_tensor, max_values = argmax_3d(outputs, device=self.device)
+                coordinates_list.append(com_tensor) 
+                max_values_list.append(max_values.permute(0,2,1))
+                
         # Stack along dimension 1
-        self.coordinates_array = torch.cat(coordinates_list, dim=1)
+        coordinates_array = torch.cat(coordinates_list, dim=1)
+        max_values_array = torch.cat(max_values_list, dim=1)
 
+        return coordinates_array, max_values_array
+
+    def threshold_coords(
+        self,
+        coords:     torch.Tensor,   # (N, C, B, 2)
+        max_values: torch.Tensor,   # (N, C, B)
+        threshold:  float,
+    ) -> torch.Tensor:              # (N, C, B, 2)
+        mask = max_values >= threshold          # (N, C, B)
+        mask = mask.unsqueeze(-1)              # (N, C, B, 1)  — broadcast over xy
+        return torch.where(mask, coords, torch.full_like(coords, float("nan")))
 
     def find_es(self):
         '''
@@ -269,9 +339,40 @@ class Predictor:
         distances_from_ed = torch.linalg.norm(fw - fw[0], axis = 1)
         es = distances_from_ed.argmax()
         return es
+    
+    def _get_heartbeat_window(self, i, coordinates_array, beat_start):
+        """Get the window of frames for heartbeat i, or None if invalid."""
+        idx = beat_start[i]
+        if idx >= len(coordinates_array):
+            return None
 
+        # Find valid ED idx
+        if torch.isnan(coordinates_array[idx, 0]).any():
+            if idx > 0 and not torch.isnan(coordinates_array[idx-1, 0]).any():
+                idx -= 1
+            elif idx < len(coordinates_array) - 1 and not torch.isnan(coordinates_array[idx+1, 0]).any():
+                idx += 1
+            else:
+                print("skipping heart cycle because ED TAfw is NaN")
+                return None
 
-    def calculate_indices(self):
+        # Determine window
+        if i == len(beat_start) - 1:
+            if len(coordinates_array) - idx <= 20:
+                print("skip heart cycle")
+                return None
+            return coordinates_array[idx:]
+        else:
+            next_idx = beat_start[i+1]
+            if next_idx < len(coordinates_array):
+                return coordinates_array[idx:next_idx]
+            elif len(coordinates_array) - idx <= 20:
+                print("skip heart cycle")
+                return None
+            else:
+                return coordinates_array[idx:]
+
+    def calculate_indices(self, coordinates_array):
         self.index_container = []
         for i in range(len(self.beat_start)):
             # extract the window of frames corresponding to one heartbeat
@@ -283,46 +384,25 @@ class Predictor:
             # between this beat and the next one. If not then the beat is valid if 
             # there are at least 20 frames after my r peak. and I use those
             # frames as my window.
-            if self.beat_start[i] > self.coordinates_array.shape[1]: # if the current R peak is out of the predicted coordinates
-                print("skip heart cycle")
-                continue
-            elif i == len(self.beat_start)-1: # if it's the last r peak and it's inside the predictions
-                if self.coordinates_array.shape[1] - self.beat_start[i] <= 20: # if no more than 20 frames after it skip the heartcycle
-                    print("skip heart cycle")
-                    continue
-                else: # more than 20 frames after it
-                    self.window = self.coordinates_array[0, self.beat_start[i]:]
-            else: #if not last heartbeat and next one is not out of the predictions
-                if self.beat_start[i+1] < self.coordinates_array.shape[1]: # if the next one is inside the predictedc interval
-                    self.window = self.coordinates_array[0, self.beat_start[i]:self.beat_start[i+1]]
-
-                else: #if not last heartbeat and next one is out of the predictions
-                    if self.coordinates_array.shape[1] - self.beat_start[i] <= 20:
-                        print("skip heart cycle")
-                        continue
-                    else: 
-                        self.window = self.coordinates_array[0, self.beat_start[i]:]
-
             
+            self.window = self._get_heartbeat_window(i, coordinates_array, self.beat_start)
+            if self.window is None:
+                continue
+
             # in the window, find the index of the ED and ES frame
             ed_idx = 0 # since the window always starts from R-peak
             es_idx = self.find_es()
 
-            # etract these frames
-            self.ed = self.window[ed_idx]            
+            # Extract frames
+            self.ed = self.window[ed_idx]
             self.es = self.window[es_idx]
-            
-            # rescale the coordinates based on pixelsize
-            self.ed[:,0] *= self.pixelsize[0]
-            self.ed[:,1] *= self.pixelsize[1]
-            self.es[:,0] *= self.pixelsize[0]
-            self.es[:,1] *= self.pixelsize[1]
 
-            calculator = RVCalculator(
-                ed_frame=self.ed,
-                es_frame=self.es,
-                method='spline')
-            
+            # Scale coordinates
+            pixelsize_tensor = torch.tensor(self.pixelsize, dtype=torch.float32, device=self.ed.device) # TODO: this line is only to make it work on MPS, needs to be changed
+            self.ed = self.ed * pixelsize_tensor
+            self.es = self.es * pixelsize_tensor
+
+            calculator = RVCalculator(ed_frame=self.ed, es_frame=self.es, method='spline')
             self.index_container.append(torch.tensor([
                 calculator.tapse_fw * 1000, #0
                 calculator.tapse_sep * 1000, #1
@@ -343,8 +423,10 @@ class Predictor:
                 calculator.strain_mid, #16
             ]))
 
-        #create array with all the predicted indices
-        self.index_array = torch.stack(self.index_container, dim=0) # torch.Size([N_beats, 17])
+        if self.index_container:
+            self.index_array = torch.stack(self.index_container, dim=0)
+        else:
+            self.index_array = torch.full((0, len(RVCalculator.INDEX_NAMES)), float("nan"))
         
 
     def write_df(self, path):
@@ -376,10 +458,11 @@ class Predictor:
         '''
         # Find the row index in the dataframe corresponding to the current path
         row_idx = self.df[self.df['path'] == path].index[0]
-        
-        # Compute the mean across heart cycles (dim=0)
-        mean_indices = self.index_array.mean(dim=0).cpu().numpy()
-        
+
+        # Compute the mean across heart cycles using NaN-safe averaging.
+        mean_indices = torch.nanmean(self.index_array, dim=0).cpu().numpy()
+        mean_indices = np.where(np.isnan(mean_indices), -1000.0, mean_indices)
+
         # Assign the mean values to the dataframe columns
         self.df.loc[row_idx, 'tapsefw'] = mean_indices[0]
         self.df.loc[row_idx, 'tapsesep'] = mean_indices[1]
@@ -407,7 +490,7 @@ class Predictor:
 
         # ensure path column exists
         if "path" not in self.df.columns:
-            ValueError("Excel file must contain a 'path' column.")
+            raise ValueError("Excel file must contain a 'path' column.")
 
         # extract the file paths
         paths = self.df["path"].dropna().tolist()
@@ -439,11 +522,15 @@ class Predictor:
             # for each R-peak, extract the closest frame
             self.beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in self.r_peaks]
 
-            # run the inference to get the coordinates_array
-            self.inference()
+            # run the inference to get the coordinates_array and max value for heatmap
+            coordinates_array, max_values_array = self.inference()
+
+            thresholded_coordinates_array = self.threshold_coords(coordinates_array, max_values_array, self.args.thresh)
+
+            thresholded_coordinates_array = thresholded_coordinates_array.squeeze(0)
 
             # calculate the indices from the predicted coordinates
-            self.calculate_indices()
+            self.calculate_indices(thresholded_coordinates_array)
             
             # put the predicted indices in the dataframe and return it
             self.write_df(path)
@@ -451,9 +538,13 @@ class Predictor:
         #save dataframe in excel
         self.df.to_excel(self.args.excel_path, index=False)
 
+        # If ground truth provided, perform Bland-Altman analysis
+        if hasattr(self.args, 'gt_excel_path') and self.args.gt_excel_path:
+            self.analyze_gt(self.args.gt_excel_path)
+
     def compute_coordinates_annotations(self, file_path):
         '''predicts the coordinates of the landmarks in the 
-        specified hdf5 file, and returns them together with the manual annotations.
+        specified hdf5 file, and returns them together with the manual annotations, and array of maximum values per point.
         Very useful for testing'''
         # load the file in 3d images of 32 frames 
         test_dataset = SingleFileClipDataset(
@@ -480,26 +571,80 @@ class Predictor:
 
             if self.args.heatmap_method:
                 # extract the maximum activated pixel from the heatmaps
-                com_tensor, maxima = argmax_3d_for_testing(outputs, device=self.device)
-                # print(com_tensor.shape)
+                com_tensor, maxima = argmax_3d(outputs, device=self.device)
 
-                # # Extract the first slice of the first image in the batch
-                # img_slice = images[0, 0, 0].cpu().numpy()
-
-                # # Extract (x, y) coordinates for all landmarks
-                # pts = com_tensor[0, 0, :].cpu().numpy() 
-
-                # visualize_image(img_slice, points=pts)
-
+                # lists in batches of 32 and then concatenate them
                 coordinates_list.append(com_tensor)
                 maxima_list.append(maxima.permute(0,2,1))
                 gt_list.append(masks)
 
         
         # Stack along dimension 1
-        self.coordinates_array = torch.cat(coordinates_list, dim=1)
-        self.maxima_array = torch.cat(maxima_list, dim=1)
-        self.gt_array = torch.cat(gt_list, dim=1)
+        coordinates_array = torch.cat(coordinates_list, dim=1)
+        maxima_array = torch.cat(maxima_list, dim=1)
+        gt_array = torch.cat(gt_list, dim=1)
+
+        return coordinates_array, maxima_array, gt_array
+
+    def analyze_gt(self, gt_path):
+        """Perform Bland-Altman analysis against ground truth Excel."""
+        gt_df = pd.read_excel(gt_path)
+        
+        # Create matching key
+        self.df['key'] = self.df['id'].astype(str) + '_' + self.df['Date'] + '_' + self.df['Time']
+        gt_df['key'] = gt_df['id'].astype('Int64').astype(str) + '_' + gt_df['Date'] + '_' + gt_df['Time']
+
+        # Merge on key
+        merged = pd.merge(self.df, gt_df, on='key', suffixes=('_pred', '_gt'))
+        
+        # Columns to analyze
+        index_cols = ['tapsefw', 'tapsesep', 'rvfac', 'rvad', 'rvas', 'rvldfw', 'rvldsep', 'rvlsfw', 'rvlssep', 'tadd', 'tasd', 'rvldmid', 'rvlsmid', 'rvlsffw', 'rvlsfglobal', 'rvlsfsep', 'rvlsfmid']
+        
+        # Create plots folder
+        plots_dir = os.path.join(os.path.dirname(self.args.excel_path), 'bland_altman')
+        os.makedirs(plots_dir, exist_ok=True)
+        
+        # Error df
+        error_df = merged[['id_pred', 'Date_pred', 'Time_pred']].copy()
+        error_df.rename(columns={'id_pred': 'id', 'Date_pred': 'Date', 'Time_pred': 'Time'}, inplace=True)
+        
+        for col in index_cols:
+            pred_col = f'{col}_pred'
+            gt_col = f'{col}_gt'
+            
+            # Filter valid values
+            valid = (merged[pred_col] != -1000) & (merged[gt_col] != -1000)
+            pred = merged.loc[valid, pred_col]
+            gt = merged.loc[valid, gt_col]
+            
+            if len(pred) == 0:
+                continue
+            
+            diff = pred - gt
+            mean_val = (pred + gt) / 2
+            
+            # Bland-Altman plot
+            plt.figure(figsize=(8, 6))
+            plt.scatter(mean_val, diff, alpha=0.6)
+            plt.axhline(np.mean(diff), color='red', linestyle='--', label=f'Mean diff: {np.mean(diff):.2f}')
+            plt.axhline(np.mean(diff) + 1.96 * np.std(diff), color='blue', linestyle='--', label='+1.96 SD')
+            plt.axhline(np.mean(diff) - 1.96 * np.std(diff), color='blue', linestyle='--', label='-1.96 SD')
+            plt.xlabel('Mean of predicted and ground truth')
+            plt.ylabel('Difference (predicted - ground truth)')
+            plt.title(f'Bland-Altman Plot for {col}')
+            plt.legend()
+            plt.grid(True)
+            plt.savefig(os.path.join(plots_dir, f'{col}_bland_altman.png'))
+            plt.close()
+            
+            # Errors
+            errors = pd.Series(np.nan, index=merged.index)
+            errors.loc[valid] = np.abs(diff)
+            error_df[f'{col}_error'] = errors.values
+
+        # Save error Excel
+        error_path = os.path.join(os.path.dirname(self.args.excel_path), 'errors.xlsx')
+        error_df.to_excel(error_path, index=False)
 
 
 
