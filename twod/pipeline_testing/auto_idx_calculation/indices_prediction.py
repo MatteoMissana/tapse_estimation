@@ -60,9 +60,10 @@ def predict_indices(model,
     r_peaks = pan_tompkins_detector(ecg, fs, plot=False)
     beat_start = [np.argmin(np.abs(images_times - ecg_times[r])) for r in r_peaks]
 
-    
-    # estract number of frames
-    num_frames = len(images)
+    if count_beats:
+        # estract number of frames
+        num_frames = len(images)
+
 
     # Inference loop
     coordinates_array = np.zeros((len(images), 3, 2))
@@ -150,8 +151,8 @@ def predict_indices(model,
     count = 0
     for i, frame_num in enumerate(beat_start):
         # I need to select a window from the calculated arrays (window = 1 heartbeat)
-        if i == len(beat_start)-1: # if it's the last heart-beat
-            if len(coordinates_array) - frame_num < 20: # if the last r peak is too close to the end, i dont consider the last "beat"
+        if i == len(beat_start)-1: # if it's the last R peak in the acquisition I look at how many frames are there left
+            if len(coordinates_array) - frame_num < 20: # if the last r peak is too close to the end, i dont consider the last part
                 print('jump heartbeat')
                 continue
             else: # take the window from last r-peak to the end otherwise
@@ -198,7 +199,7 @@ def predict_indices(model,
         else: #best calculation method
             calculator = RVCalculatorBest(window_unfiltered, window_kalman, window_avg, window_both, ed_frame, es_frame)
 
-        # if not best_combination then the array has 17 values (all the indexes)
+        # the array has 17 values (all the indexes)
         index_container[i] = [
             calculator.tapse_fw * 1000, #0
             calculator.tapse_sep * 1000, #1
@@ -232,7 +233,7 @@ def predict_indices(model,
             return np.median(index_container, axis=0)
     else:
         if not avg_all:
-            # pick the maximum, minimum or mean value based on the index best performance
+            # pick the maximum, minimum median or mean value based on the index best performance (I pick a reduction method for each index)
             result = []
             for i in range(index_container.shape[1]):
                 if i in [5]:
@@ -245,12 +246,9 @@ def predict_indices(model,
                     result.append(index_container[:, i].min())
             return np.asarray(result)
         else:
-
             # print the number oif heart cycles
             print("Number of heart cycles", count)
             return count, num_frames, index_container.mean(axis=0)
-
-
 
 import os
 import argparse

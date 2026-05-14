@@ -4,7 +4,7 @@ runs/
 checkpoints/
 2d+t/checkpoints/
 /checkpoints/
-/wandb/
+*wandb*
 annotation_video.mp4
 best_predictions_video.mp4
 results_video.mp4
@@ -25,3 +25,4 @@ results_video.mp4
 **/__pycache__/
 
 /tapse_estimation.egg-info/
+/data/
