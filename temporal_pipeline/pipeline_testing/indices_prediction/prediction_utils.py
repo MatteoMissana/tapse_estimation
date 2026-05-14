@@ -15,6 +15,9 @@ from temporal_pipeline.models.models import UNet3D
 from temporal_pipeline.postprocessing.coordinates_from_heatmaps import argmax_3d
 from temporal_pipeline.utils.plot import visualize_image
 
+# This is a script containing all the utils to support the prediction of the model, both with and without thresholding.
+# Useful for indices prediction, boxplot analysis, and BA plots
+
 class RVCalculator:
     """Compute RV geometry indices from predicted ED/ES landmarks.
 
@@ -540,7 +543,7 @@ class Predictor:
 
         # If ground truth provided, perform Bland-Altman analysis
         if hasattr(self.args, 'gt_excel_path') and self.args.gt_excel_path:
-            self.analyze_gt(self.args.gt_excel_path)
+            self.analyze_gt(self.args.gt_excel_path, self.args.thresh)
 
     def compute_coordinates_annotations(self, file_path):
         '''predicts the coordinates of the landmarks in the 
@@ -586,7 +589,7 @@ class Predictor:
 
         return coordinates_array, maxima_array, gt_array
 
-    def analyze_gt(self, gt_path):
+    def analyze_gt(self, gt_path, thresh):
         """Perform Bland-Altman analysis against ground truth Excel."""
         gt_df = pd.read_excel(gt_path)
         
@@ -601,7 +604,7 @@ class Predictor:
         index_cols = ['tapsefw', 'tapsesep', 'rvfac', 'rvad', 'rvas', 'rvldfw', 'rvldsep', 'rvlsfw', 'rvlssep', 'tadd', 'tasd', 'rvldmid', 'rvlsmid', 'rvlsffw', 'rvlsfglobal', 'rvlsfsep', 'rvlsfmid']
         
         # Create plots folder
-        plots_dir = os.path.join(os.path.dirname(self.args.excel_path), 'bland_altman')
+        plots_dir = os.path.join(os.path.dirname(self.args.excel_path), 'bland_altman_'+str(thresh))
         os.makedirs(plots_dir, exist_ok=True)
         
         # Error df
@@ -639,18 +642,9 @@ class Predictor:
             
             # Errors
             errors = pd.Series(np.nan, index=merged.index)
-            errors.loc[valid] = np.abs(diff)
+            errors.loc[valid] = diff
             error_df[f'{col}_error'] = errors.values
 
         # Save error Excel
         error_path = os.path.join(os.path.dirname(self.args.excel_path), 'errors.xlsx')
         error_df.to_excel(error_path, index=False)
-
-
-
-
-
-
-
-
-

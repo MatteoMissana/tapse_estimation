@@ -35,6 +35,16 @@ from temporal_pipeline.pipeline_testing.indices_prediction.prediction_utils impo
  
  * with each subfolder containing the relative hdf5 or dicom (without extension)
  * files.
+
+ example usage:
+
+python3 temporal_pipeline/pipeline_testing/indices_prediction/predict_indices.py 
+    --excel_path "/Users/mmissana/Desktop/tapse_estimation/data/ba_plots/excel_with_indices.xlsx" 
+    --heatmap_method --model_checkpoints "/Users/mmissana/Desktop/Best_model_Unet_6_mag/best.pt" 
+    --test_set_path "/Users/mmissana/Desktop/tapse_estimation/data/test_set_for_prediction" 
+    --thresh 50 
+    --gt_excel_path "/Users/mmissana/Desktop/tapse_estimation/data/ba_plots/maesurements_jinyang_modified_for_analysis.xlsx"
+
  '''
 
 # Argument parser

@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 
+''' losses used in the distance+movement based training method'''
 
 class CombinedLandmarkLoss(nn.Module):
     """

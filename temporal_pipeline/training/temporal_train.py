@@ -15,6 +15,8 @@ from temporal_pipeline.losses.heatmap_losses import HeatmapMotionLoss, HeatmapBC
 from temporal_pipeline.training.trainer import Trainer
 from temporal_pipeline.utils.save import get_experiment_path
 
+''' script for training'''
+
 # Argument parser
 def parse_args():
     parser = argparse.ArgumentParser(description='Train model for temporal window keypoint detection.')
@@ -31,6 +33,7 @@ def parse_args():
     parser.add_argument('--from_scratch', action='store_true', help='Train model from scratch')
     parser.add_argument('--initial_lr', type=float, default=1e-4, help='Initial learning rate')
     parser.add_argument('--lr_patience', type=int, default=10, help='Reduce on plateau patience')
+    parser.add_argument('--loss_parameter', type=float, default=0.1, help='Parameter to weight the loss; weight on MSE;  (1 - alpha) goes to motion loss')
     parser.add_argument('--model', type=str, default='3D_UNet', help='name of the model: supported "3D_UNet", "echocoder"')
     parser.add_argument('--reduce_factor', type=float, default=0.3, help='Factor by which the learning rate will be reduced by ReduceLROnPlateau. new_lr = lr * factor')
     parser.add_argument('--save_model_path', type=str, default=None, help='Path to save model checkpoints')
@@ -112,7 +115,7 @@ def main():
             peak_value=args.heatmap_peak_value,
         )
 
-        train_loss = HeatmapMotionLoss()
+        train_loss = HeatmapMotionLoss(alpha=args.loss_parameter)
         val_loss = CombinedLandmarkLoss(lambda_motion=0, lambda_var=0, reduction='mean')
     else:
         # else the dataset needs to output just the point coordinates, and the loss is distance-based

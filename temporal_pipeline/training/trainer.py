@@ -5,9 +5,11 @@ from pathlib import Path
 from tqdm import tqdm
 import wandb
 
-from temporal_pipeline.postprocessing.coordinates_calculation_from_masks import center_of_mass_3d, argmax_3d
+from temporal_pipeline.postprocessing.coordinates_from_heatmaps import center_of_mass_3d, argmax_3d
 from temporal_pipeline.utils.plot import save_image, visualize_image
 
+
+'''class with all the helpers for training'''
 
 class Trainer:
     def __init__(

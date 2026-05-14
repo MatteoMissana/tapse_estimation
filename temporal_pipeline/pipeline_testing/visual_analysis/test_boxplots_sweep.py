@@ -8,8 +8,14 @@ import h5py
 
 from temporal_pipeline.pipeline_testing.indices_prediction.prediction_utils import Predictor
 
-LANDMARK_NAMES = ["Landmark 0", "Landmark 1", "Landmark 2"]  # TODO: rename as needed
+LANDMARK_NAMES = ["TAfw", "TAsep", "Apex"]
 THRESHOLDS = list(range(0, 101))  # 0 to 100 inclusive
+
+'''code to perform the statistical analysis. Based on the arguments it can do:
+- threshold based or not threshold based inference
+- threshold sweep to get the mean distance vs threshold plot
+- boxplots of mean dist per patient and per landmark
+'''
 
 
 # ---------------------------------------------------------------------------

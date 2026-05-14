@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+''' losses that are used for the heatmap regression type of training. I reality, what worked best was 
+a simple MSEloss with radius of the gaussian that decreased at each epoch'''
+
 def soft_argmax_2d(heatmaps: torch.Tensor, temperature: float = 1.0) -> torch.Tensor:
     """
     Differentiable coordinate extraction via softmax-weighted expectation.
